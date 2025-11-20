@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WellTask Pro</title>
+  <title>WellTask</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -296,11 +296,8 @@
       renderApp();
     },
     deleteWorkspace: (id) => {
-      if (state.workspaces.length === 1) {
-        alert("You must have at least one workspace.");
-        return;
-      }
-      if (!confirm("Delete this workspace and its projects?")) return;
+      // no popup; silently ignore if last workspace
+      if (state.workspaces.length === 1) return;
 
       const projIds = state.projects.filter(p => p.workspaceId === id).map(p => p.id);
       state.projects = state.projects.filter(p => p.workspaceId !== id);
@@ -349,7 +346,7 @@
       renderApp();
     },
     deleteProject: (id) => {
-      if (!confirm("Delete this project and its tasks?")) return;
+      // no popup
       state.groups = state.groups.filter(g => g.projectId !== id);
       state.tasks = state.tasks.filter(t => t.projectId !== id);
       state.projects = state.projects.filter(p => p.id !== id);
@@ -386,7 +383,7 @@
       }
     },
     deleteGroup: (id) => {
-      if (!confirm("Delete this group and its tasks?")) return;
+      // no popup
       state.groups = state.groups.filter(g => g.id !== id);
       state.tasks = state.tasks.filter(t => t.groupId !== id);
       renderApp();
@@ -501,7 +498,7 @@
   };
   window.actions = actions;
 
-  // ---------- Sidebar ----------
+  // ---------- Sidebar (UPDATED for inline rename + hover text) ----------
   function renderSidebar() {
     const { darkMode, workspaces, selectedWorkspace, projects, selectedProject, ui } = state;
     const cardBg = darkMode ? 'bg-gray-900' : 'bg-white';
@@ -511,20 +508,31 @@
 
     const wsHtml = workspaces.map(ws => {
       const isActive = ws.id === selectedWorkspace;
-      const rowClasses = `${hoverBg} ${isActive ? 'bg-blue-600 text-white hover:bg-blue-600' : textColor}`;
-      return `
-        <div class="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer mb-1 ${rowClasses}">
-          <div class="flex-1" onclick="actions.selectWorkspace(${ws.id})">
-            ${
-              ui.editingWorkspaceId === ws.id
-                ? `<input id="ws-name-input-${ws.id}" value="${ui.editingWorkspaceName}"
-                          class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
-                          autofocus
-                          onblur="actions.saveWorkspaceName(${ws.id})"
-                          onkeypress="if(event.key==='Enter'){actions.saveWorkspaceName(${ws.id})}" />`
-                : `<span class="text-sm font-medium">${ws.name}</span>`
-            }
+      const rowClasses = isActive
+        ? 'bg-blue-600 text-white hover:bg-blue-700'
+        : `${hoverBg} ${textColor}`;
+
+      const isEditing = ui.editingWorkspaceId === ws.id;
+
+      const nameCell = isEditing
+        ? `
+          <div class="flex-1">
+            <input id="ws-name-input-${ws.id}" value="${ui.editingWorkspaceName}"
+                   class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
+                   autofocus
+                   onblur="actions.saveWorkspaceName(${ws.id})"
+                   onkeypress="if(event.key==='Enter'){actions.saveWorkspaceName(${ws.id})}" />
           </div>
+        `
+        : `
+          <div class="flex-1 cursor-pointer" onclick="actions.selectWorkspace(${ws.id})">
+            <span class="text-sm font-medium">${ws.name}</span>
+          </div>
+        `;
+
+      return `
+        <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
+          ${nameCell}
           <div class="flex items-center gap-1 text-xs">
             <button onclick="event.stopPropagation(); actions.startEditWorkspace(${ws.id})"
                     class="opacity-80 hover:opacity-100">
@@ -546,21 +554,31 @@
         const rowClasses = isActive
           ? 'bg-blue-100 text-blue-800'
           : `${hoverBg} ${textColor}`;
-        return `
-          <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 cursor-pointer ${rowClasses}">
-            <div class="flex items-center gap-2 flex-1"
+
+        const isEditing = ui.editingProjectId === p.id;
+
+        const nameCell = isEditing
+          ? `
+            <div class="flex items-center gap-2 flex-1">
+              <span class="w-2 h-2 rounded-full ${p.color}"></span>
+              <input id="proj-name-input-${p.id}" value="${ui.editingProjectName}"
+                     class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
+                     autofocus
+                     onblur="actions.saveProjectName(${p.id})"
+                     onkeypress="if(event.key==='Enter'){actions.saveProjectName(${p.id})}" />
+            </div>
+          `
+          : `
+            <div class="flex items-center gap-2 flex-1 cursor-pointer"
                  onclick="actions.selectProject(${p.id})">
               <span class="w-2 h-2 rounded-full ${p.color}"></span>
-              ${
-                ui.editingProjectId === p.id
-                  ? `<input id="proj-name-input-${p.id}" value="${ui.editingProjectName}"
-                            class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
-                            autofocus
-                            onblur="actions.saveProjectName(${p.id})"
-                            onkeypress="if(event.key==='Enter'){actions.saveProjectName(${p.id})}" />`
-                  : `<span class="text-sm">${p.name}</span>`
-              }
+              <span class="text-sm">${p.name}</span>
             </div>
+          `;
+
+        return `
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
+            ${nameCell}
             <div class="flex items-center gap-1 text-xs">
               <button onclick="event.stopPropagation(); actions.startEditProject(${p.id})"
                       class="opacity-80 hover:opacity-100">
@@ -820,7 +838,6 @@
         </div>
       </div>
     `;
-
     const groupBlocks = groups
       .filter(grp => grp.projectId === selectedProject)
       .map(grp => {
