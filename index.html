@@ -31,25 +31,22 @@
 <div id="app"></div>
 
 <script>
-  const ZOHO_API_URL = "https://cliq.zoho.com/api/v2/webhooks/token/1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360?";
-  // ---------- Auth ----------
+  // ⚠️ PASTE YOUR LONG WEBHOOK URL HERE (Ensure it ends with '?')
+  const ZOHO_API_URL = "https://cliq.zoho.com/api/v2/webhooks/token/PASTE_YOUR_LONG_TOKEN_HERE?";
+
+  // ---------- Auth & Debug Logic ----------
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
-  // 👇👇 ADD THIS DEBUG CODE HERE 👇👇
+
+  // DEBUG: Check if the Widget passed the token
   if (!token) {
+      // If you see this alert, the problem is in the ZOHO WIDGET CODE
       alert("❌ NO TOKEN FOUND! The Widget is not passing the login info.");
   } else {
-      alert("✅ Token Received!");
+      // If you see this, everything is perfect.
+      alert("✅ Token Received! Connection Successful.");
   }
-  // 👆👆 END DEBUG CODE 👆👆
 
-  let currentUser = null;
-  if (token) {
-    try {
-      const decoded = atob(token);
-
-
-  
   let currentUser = null;
   if (token) {
     try {
@@ -65,6 +62,7 @@
       }
     } catch (e) {
       console.error("Auth Failed", e);
+      alert("Error decoding token: " + e.message);
     }
   }
 
@@ -143,16 +141,12 @@
         customFields: {}
       },
       columnsGroupId: null,
-
       editingWorkspaceId: null,
       editingWorkspaceName: '',
-
       editingProjectId: null,
       editingProjectName: '',
-
-      editingTaskId: null,       // inline task rename flag
-
-      editingGroupId: null,      // NEW: inline group rename
+      editingTaskId: null,
+      editingGroupId: null,
       editingGroupName: ''
     }
   };
@@ -179,16 +173,22 @@
   // ---------- API ----------
   const api = {
     fetchTasks: async () => {
+      // Do not fetch if no user or if URL is default
       if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
+      
       try {
         const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
         const json = await res.json();
+        
         if (json.status === 'success' && json.data) {
           state.tasks = json.data.map(t => {
             let extras = { duedate: "", custom: {} };
             try {
-              if (t.attributes) extras = JSON.parse(t.attributes);
+              // READ ATTRIBUTES FROM DB (customattributes)
+              const attrRaw = t.customattributes || t.attributes;
+              if (attrRaw) extras = JSON.parse(attrRaw);
             } catch (e) {}
+            
             return {
               id: String(t.id),
               name: t.taskname,
@@ -212,6 +212,7 @@
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
+      // Optimistic UI Update
       const tempId = String(uid());
       state.tasks.push({
         id: tempId,
@@ -236,6 +237,7 @@
           `&priority=${encodeURIComponent(taskData.priority)}` +
           `&attributes=${encodeURIComponent(packed)}`
         );
+        // Fetch to get real ID
         api.fetchTasks();
       } catch (e) {
         console.error("Create Error", e);
@@ -315,9 +317,7 @@
       renderApp();
     },
     deleteWorkspace: (id) => {
-      // silently ignore if last workspace
       if (state.workspaces.length === 1) return;
-
       const projIds = state.projects.filter(p => p.workspaceId === id).map(p => p.id);
       state.projects = state.projects.filter(p => p.workspaceId !== id);
       state.groups = state.groups.filter(g => !projIds.includes(g.projectId));
@@ -391,7 +391,6 @@
       });
       renderApp();
     },
-    // NEW: inline group rename (no popup)
     startEditGroup: (id) => {
       const g = state.groups.find(gr => gr.id === id);
       if (!g) return;
@@ -1064,7 +1063,7 @@
         <div class="flex-1 mr-2">
           <input type="date" value="${t.dueDate || ''}"
                  ${baseInput}
-                 onchange="actions.updateTaskField('${t.id}', 'dueDate', this.value)" />
+                 onchange="actions.updateTaskField('${t.id}', 'duedate', this.value)" />
         </div>
       `;
     }
@@ -1118,5 +1117,3 @@
 </script>
 </body>
 </html>
-
-
