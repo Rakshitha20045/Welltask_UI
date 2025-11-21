@@ -157,33 +157,40 @@
   }
 
   // =====================================================
-  // 2. API HANDLER (Corrected for Webhook & Database)
+  // 2. API HANDLER (UPDATED FOR PROXY / CORS FIX)
   // =====================================================
   const api = {
+    // Helper to call our Vercel Proxy
+    callProxy: async (payload) => {
+      // We send the Zoho URL as a query parameter named 'target_url'
+      // We send the data in the body
+      const proxyUrl = `/api/proxy?target_url=${encodeURIComponent(ZOHO_API_URL)}`;
+      
+      const res = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return await res.json();
+    },
+
     fetchTasks: async () => {
       if (!state.currentUser || !ZOHO_API_URL) return;
       try {
-        // ✅ FIX: Use POST with JSON body for Webhook
-        const res = await fetch(ZOHO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        // Use the Proxy helper
+        const json = await api.callProxy({
             request_method: 'GET',
             user_email: state.currentUser.email
-          })
         });
 
-        const json = await res.json();
         if (json.status === 'success' && json.data) {
           state.tasks = json.data.map(t => {
             let extras = { duedate: "", custom: {} };
             try {
-              // ✅ FIX: Match DB field 'customattributes'
               if (t.customattributes) extras = JSON.parse(t.customattributes);
             } catch (e) {}
             
             return {
-              // ✅ FIX: Handle ID/ROWID from DB
               id: String(t.ROWID || t.ID || t.id), 
               name: t.taskname,
               status: t.status || 'Not Started',
@@ -222,22 +229,16 @@
       });
 
       try {
-        // ✅ FIX: POST request matching DB columns
-        await fetch(ZOHO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        await api.callProxy({
             request_method: 'POST',
             action: 'create',
             user_email: state.currentUser.email,
-            taskname: taskData.name,          // mapped name -> taskname
+            taskname: taskData.name,
             status: taskData.status,
             priority: taskData.priority,
             assignee: taskData.assignee ? taskData.assignee.name : 'Unassigned',
-            customattributes: packed          // mapped attributes -> customattributes
-          })
+            customattributes: packed
         });
-        // Refresh to get the real DB ID
         setTimeout(() => api.fetchTasks(), 500);
       } catch (e) {
         console.error("Create Error", e);
@@ -252,11 +253,7 @@
           custom: task.customFields || {}
         });
 
-        // ✅ FIX: POST request for Update
-        await fetch(ZOHO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        await api.callProxy({
             request_method: 'POST',
             action: 'update',
             user_email: state.currentUser.email,
@@ -266,7 +263,6 @@
             priority: task.priority,
             assignee: task.assignee ? task.assignee.name : 'Unassigned',
             customattributes: packed
-          })
         });
       } catch (e) {
         console.error("Update Error", e);
@@ -277,16 +273,11 @@
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
       try {
-        // ✅ FIX: POST request for Delete
-        await fetch(ZOHO_API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        await api.callProxy({
             request_method: 'POST',
             action: 'delete',
             user_email: state.currentUser.email,
             id: id
-          })
         });
       } catch (e) {
         console.error("Delete Error", e);
