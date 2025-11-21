@@ -153,14 +153,11 @@
   }
 
   // =====================================================
-  // 2. API HANDLER (UPDATED WITH PROXY & PARSING FIXES)
+  // 2. API HANDLER (UPDATED)
   // =====================================================
   const api = {
-    // Helper to call our Vercel Proxy
     callProxy: async (payload) => {
-      // We send the Zoho URL as a query parameter named 'target_url'
       const proxyUrl = `/api/proxy?target_url=${encodeURIComponent(ZOHO_API_URL)}`;
-      
       const res = await fetch(proxyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,27 +169,36 @@
     fetchTasks: async () => {
       if (!state.currentUser || !ZOHO_API_URL) return;
       try {
-        // Use the Proxy helper
         const json = await api.callProxy({
             request_method: 'GET',
             user_email: state.currentUser.email
         });
 
-        // ✅ FIX: Logging added as requested
+        // ✅ DEBUG LOGGING
         console.log("Fetch Response:", json);
 
-        // ✅ FIX: Robust parsing logic
-        // Handle both formats: {status, data: [...]} OR direct array [...] OR {user_ids} (error)
+        // ✅ ROBUST PARSING LOGIC STARTS HERE
         let taskArray = [];
         
+        // Case 1: Standard Zoho Response { status: "success", data: [...] }
         if (json.status === 'success' && Array.isArray(json.data)) {
             taskArray = json.data;
-        } else if (Array.isArray(json)) {
+        } 
+        // Case 2: Direct Array Response [...]
+        else if (Array.isArray(json)) {
             taskArray = json;
-        } else if (json.data && Array.isArray(json.data)) {
-            // Sometimes data comes without explicit status
+        } 
+        // Case 3: Data property without explicit status
+        else if (json.data && Array.isArray(json.data)) {
             taskArray = json.data;
         }
+        // Case 4: Error - User IDs returned (Old Chat Bot Code Running)
+        else if (json.user_ids) {
+            console.error("CRITICAL ERROR: Webhook returned user_ids. The 'Clean' Webhook code is NOT saved correctly in Zoho.");
+            taskArray = [];
+        }
+
+        console.log("Parsed Task Array:", taskArray);
 
         if (taskArray.length > 0) {
           state.tasks = taskArray.map(t => {
@@ -215,8 +221,7 @@
           });
           renderApp();
         } else {
-           // Log if we got data but it wasn't an array of tasks
-           console.log("Parsing check: No valid task array found in response.");
+           console.log("No tasks to display.");
         }
 
       } catch (e) {
@@ -228,10 +233,9 @@
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
-      // ✅ FIX: Removed Optimistic UI Update (tempId lines removed)
-      
+      // ✅ REMOVED Optimistic UI Update to prevent flickering
       state.ui.showNewTask = null;
-      renderApp(); // Just re-render to close input
+      renderApp(); 
 
       const packed = JSON.stringify({
         duedate: taskData.dueDate,
@@ -250,7 +254,7 @@
             customattributes: packed
         });
         
-        // ✅ FIX: Changed setTimeout to await fetchTasks
+        // ✅ Wait for fetch to complete before showing result
         await api.fetchTasks();
       } catch (e) {
         console.error("Create Error", e);
