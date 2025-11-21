@@ -31,11 +31,7 @@
   // =====================================================
   // 1. URL & AUTH SETUP
   // =====================================================
-  
-  // Get parameters from the URL passed by the Widget
   const urlParams = new URLSearchParams(window.location.search);
-  
-  // Get API URL dynamically.
   const ZOHO_API_URL = urlParams.get('api_url') || ""; 
   const token = urlParams.get('token');
 
@@ -157,12 +153,12 @@
   }
 
   // =====================================================
-  // 2. API HANDLER (UPDATED FOR PROXY & REQUESTED FIXES)
+  // 2. API HANDLER (UPDATED WITH PROXY & PARSING FIXES)
   // =====================================================
   const api = {
     // Helper to call our Vercel Proxy
     callProxy: async (payload) => {
-      // Send the Zoho URL as a query parameter named 'target_url'
+      // We send the Zoho URL as a query parameter named 'target_url'
       const proxyUrl = `/api/proxy?target_url=${encodeURIComponent(ZOHO_API_URL)}`;
       
       const res = await fetch(proxyUrl, {
@@ -182,18 +178,30 @@
             user_email: state.currentUser.email
         });
 
-        // LOG RESPONSE AS REQUESTED
+        // ✅ FIX: Logging added as requested
         console.log("Fetch Response:", json);
 
-        if (json.status === 'success' && json.data) {
-          state.tasks = json.data.map(t => {
+        // ✅ FIX: Robust parsing logic
+        // Handle both formats: {status, data: [...]} OR direct array [...] OR {user_ids} (error)
+        let taskArray = [];
+        
+        if (json.status === 'success' && Array.isArray(json.data)) {
+            taskArray = json.data;
+        } else if (Array.isArray(json)) {
+            taskArray = json;
+        } else if (json.data && Array.isArray(json.data)) {
+            // Sometimes data comes without explicit status
+            taskArray = json.data;
+        }
+
+        if (taskArray.length > 0) {
+          state.tasks = taskArray.map(t => {
             let extras = { duedate: "", custom: {} };
             try {
               if (t.customattributes) extras = JSON.parse(t.customattributes);
             } catch (e) {}
             
             return {
-              // Handle ID/ROWID from DB
               id: String(t.ROWID || t.ID || t.id), 
               name: t.taskname,
               status: t.status || 'Not Started',
@@ -206,7 +214,11 @@
             };
           });
           renderApp();
+        } else {
+           // Log if we got data but it wasn't an array of tasks
+           console.log("Parsing check: No valid task array found in response.");
         }
+
       } catch (e) {
         console.error("Sync Error", e);
       }
@@ -216,12 +228,10 @@
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
-      // --- REQUESTED CHANGE START: No Optimistic UI Update ---
-      // We removed the lines that push to state.tasks temporarily
-      // -------------------------------------------------------
-
+      // ✅ FIX: Removed Optimistic UI Update (tempId lines removed)
+      
       state.ui.showNewTask = null;
-      renderApp(); // Just close the input box
+      renderApp(); // Just re-render to close input
 
       const packed = JSON.stringify({
         duedate: taskData.dueDate,
@@ -240,7 +250,7 @@
             customattributes: packed
         });
         
-        // --- REQUESTED CHANGE: Await fetch instead of timeout ---
+        // ✅ FIX: Changed setTimeout to await fetchTasks
         await api.fetchTasks();
       } catch (e) {
         console.error("Create Error", e);
@@ -287,7 +297,7 @@
     }
   };
 
-  // ---------- Actions (UI Logic) ----------
+  // ---------- Actions ----------
   const actions = {
     render: () => renderApp(),
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
@@ -1069,13 +1079,13 @@
     lucide.createIcons();
   }
 
-  // --- REQUESTED CHANGE: Intelligent Auto-refresh ---
+  // ✅ FIX: UPDATED AUTO-REFRESH INTERVAL AS REQUESTED (5000ms)
   // Only refresh if user is NOT currently editing a task name
   setInterval(() => {
     if (state.currentUser && !state.ui.editingTaskId) {
       api.fetchTasks();
     }
-  }, 5000); // Increased to 5s as requested
+  }, 5000);
 
   // Initial fetch
   if (state.currentUser) api.fetchTasks();
