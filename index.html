@@ -35,7 +35,21 @@
   // ---------- Auth ----------
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
+  // 👇👇 ADD THIS DEBUG CODE HERE 👇👇
+  if (!token) {
+      alert("❌ NO TOKEN FOUND! The Widget is not passing the login info.");
+  } else {
+      alert("✅ Token Received!");
+  }
+  // 👆👆 END DEBUG CODE 👆👆
 
+  let currentUser = null;
+  if (token) {
+    try {
+      const decoded = atob(token);
+
+
+  
   let currentUser = null;
   if (token) {
     try {
@@ -1104,4 +1118,5 @@
 </script>
 </body>
 </html>
+
 
