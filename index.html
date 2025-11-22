@@ -52,7 +52,7 @@
     showLogin: !currentUser,
     isLoading: false,
     
-    // NEW: Save Status for UI feedback
+    // Save Status for UI feedback
     saveStatus: 'saved', // 'saved', 'saving', 'pending', 'error'
 
     workspaces: [],
@@ -124,6 +124,7 @@
       }
     },
 
+    // 🔴 FIXED: REMOVED AUTO-SAVE FROM HERE
     initDefaults: () => {
       const wsId = uid();
       const pId = uid();
@@ -139,18 +140,19 @@
       state.tasks = [];
       state.selectedWorkspace = wsId;
       state.selectedProject = pId;
-      api.triggerSave(); // Use the trigger function
+      
+      // ❌ REMOVED: api.triggerSave(); 
+      // This prevents overwriting your database if the load fails momentarily.
     },
 
-    // 🔴 CRITICAL FIX: DEBOUNCED SAVE
-    // This prevents saving too often and hitting error 429
+    // DEBOUNCED SAVE (Prevents Rate Limiting)
     triggerSave: () => {
       // 1. Clear existing timer
       if (api.saveTimer) clearTimeout(api.saveTimer);
       
       // 2. Update UI to show we have pending changes
       state.saveStatus = 'pending';
-      renderStatusIndicator(); // Only re-render status, not whole app
+      renderStatusIndicator(); 
 
       // 3. Set new timer for 2 seconds
       api.saveTimer = setTimeout(() => {
@@ -182,7 +184,6 @@
             })
         });
         
-        // Handle non-JSON responses (prevent SyntaxError 'A')
         const text = await res.text();
         let json;
         try {
@@ -208,7 +209,7 @@
     }
   };
 
-  // ========== ACTIONS (Updated to use triggerSave) ==========
+  // ========== ACTIONS ==========
   const actions = {
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
     
