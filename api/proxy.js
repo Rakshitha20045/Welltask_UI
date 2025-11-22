@@ -11,7 +11,8 @@ export default async function handler(request, response) {
   }
 
   // 🔴 REPLACE WITH YOUR ACTUAL ZOHO WEBHOOK URL
-  const ZOHO_URL = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=YOUR_KEY_HERE";
+  const ZOHO_URL = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360
+";
 
   try {
     const url = new URL(ZOHO_URL);
