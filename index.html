@@ -235,6 +235,11 @@
                 // If this is the initial structure, sync everything immediately.
                 api.syncAll(); 
             }
+            if (json.status !== 'success' || (json.data && !json.data.id && json.data.status !== 'success' && json.data.error)) {
+                console.error(`DELUGE ERROR: Metadata ${action} failed. Response:`, json);
+                // alert(`Metadata Error: ${json.data.message || 'Check Cliq logs.'}`); // Optional alert for persistent failure
+                return; 
+            }
         } catch(e) { console.error(`API: Metadata ${action} Error:`, e); }
     },
 
@@ -269,7 +274,7 @@
         
         console.log("API: Sending Task Create URL:", postUrl); // CHECK THIS URL!
         
-        // 🔴 CRITICAL FIX: Ensure we await the response and check for Deluge error payload
+        // 🔴 CRITICAL FIX: Await the full response from the proxy/Deluge
         const response = await fetch(postUrl);
         const json = await response.json(); // Read the JSON result from the Deluge handler
         
@@ -287,7 +292,6 @@
     },
 
     updateTask: async (task) => {
-      // ... (omitted for brevity)
       try {
         const packed = JSON.stringify({ duedate: task.dueDate || "", custom: task.customFields || {}, groupId: task.groupId });
         const updateUrl = 
@@ -304,6 +308,7 @@
         const response = await fetch(updateUrl);
         const json = await response.json();
         console.log("API: Task Update Response:", json);
+         if (json.status !== 'success') { console.error("DELUGE ERROR: Task update failed. Full Response:", json); }
 
       } catch (e) { console.error(e); }
     },
