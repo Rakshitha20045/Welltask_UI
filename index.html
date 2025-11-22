@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,6 +7,7 @@
   <title>WellTask</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -18,6 +20,7 @@
       }
     }
   </script>
+
   <style>
     ::-webkit-scrollbar{width:8px;height:8px;}
     ::-webkit-scrollbar-track{background:transparent;}
@@ -27,12 +30,12 @@
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
 <div id="app"></div>
+
 <script>
-  // =====================================================
-  // 1. URL & AUTH SETUP
-  // =====================================================
+  const ZOHO_API_URL = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360";
+
+  // ---------- Auth ----------
   const urlParams = new URLSearchParams(window.location.search);
-  const ZOHO_API_URL = urlParams.get('api_url') || ""; 
   const token = urlParams.get('token');
 
   let currentUser = null;
@@ -61,15 +64,18 @@
     currentView: 'list',
     currentUser,
     showLogin: !currentUser,
+
     workspaces: [
       { id: 1, name: 'My Workspace' }
     ],
     selectedWorkspace: 1,
+
     projects: [
       { id: 1, name: 'Marketing Campaign', color: 'bg-purple-500', workspaceId: 1 },
       { id: 2, name: 'Product Development', color: 'bg-blue-500', workspaceId: 1 }
     ],
     selectedProject: 1,
+
     groups: [
       {
         id: 1,
@@ -111,7 +117,9 @@
         ]
       }
     ],
+
     tasks: [],
+
     ui: {
       showNewTask: null,
       newTask: {
@@ -123,12 +131,16 @@
         customFields: {}
       },
       columnsGroupId: null,
+
       editingWorkspaceId: null,
       editingWorkspaceName: '',
+
       editingProjectId: null,
       editingProjectName: '',
-      editingTaskId: null,
-      editingGroupId: null,
+
+      editingTaskId: null,       // inline task rename flag
+
+      editingGroupId: null,      // NEW: inline group rename
       editingGroupName: ''
     }
   };
@@ -152,185 +164,51 @@
     }
   }
 
-  // =====================================================
-  // 2. API HANDLER (UPDATED)
-  // =====================================================
+  // ---------- API ----------
   const api = {
-    callProxy: async (payload) => {
-      const proxyUrl = `/api/proxy?target_url=${encodeURIComponent(ZOHO_API_URL)}`;
-      console.log("📤 Sending to proxy:", payload);
-      const res = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
-      console.log("📥 Received from proxy:", json);
-      return json;
-    },
-
     fetchTasks: async () => {
-      if (!state.currentUser || !ZOHO_API_URL) {
-        console.log("❌ No user or API URL");
-        return;
-      }
-      
-      console.log("🔄 Fetching all data...");
-      
+      if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
       try {
-        const json = await api.callProxy({
-            request_method: 'GET',
-            user_email: state.currentUser.email
-        });
-
-        console.log("✅ Fetch Response:", json);
-
-        // Parse workspaces
-        if (json.workspaces && json.workspaces.length > 0) {
-          console.log("📦 Parsing workspaces:", json.workspaces.length);
-          state.workspaces = json.workspaces.map(w => ({
-            id: String(w.ROWID || w.ID),
-            name: w.name
-          }));
-          console.log("✅ Workspaces loaded:", state.workspaces);
-        } else {
-          console.log("⚠️ No workspaces found");
-        }
-
-        // Parse projects
-        if (json.projects && json.projects.length > 0) {
-          console.log("📦 Parsing projects:", json.projects.length);
-          state.projects = json.projects.map(p => {
-            let attrs = {};
-            try {
-              attrs = JSON.parse(p.attributes || '{}');
-            } catch(e) {
-              console.warn("⚠️ Failed to parse project attributes:", e);
-            }
-            
-            return {
-              id: String(p.ROWID || p.ID),
-              name: p.name,
-              color: attrs.color || 'bg-blue-500',
-              workspaceId: p.relatedid
-            };
-          });
-          console.log("✅ Projects loaded:", state.projects);
-        } else {
-          console.log("⚠️ No projects found");
-        }
-
-        // Parse groups
-        if (json.groups && json.groups.length > 0) {
-          console.log("📦 Parsing groups:", json.groups.length);
-          state.groups = json.groups.map(g => {
-            let attrs = {};
-            try {
-              attrs = JSON.parse(g.attributes || '{}');
-            } catch(e) {
-              console.warn("⚠️ Failed to parse group attributes:", e);
-            }
-            
-            let cols = [];
-            try {
-              cols = JSON.parse(attrs.columns || '[]');
-            } catch(e) {
-              console.warn("⚠️ Failed to parse group columns:", e);
-            }
-            
-            return {
-              id: String(g.ROWID || g.ID),
-              name: g.name,
-              projectId: g.relatedid,
-              collapsed: attrs.collapsed === 'true' || attrs.collapsed === true,
-              columns: cols.length > 0 ? cols : [
-                { id: 'task', name: 'Task', isDefault: true },
-                { id: 'assignee', name: 'Assignee', isDefault: true },
-                { id: 'priority', name: 'Priority', isDefault: true },
-                { id: 'status', name: 'Status', isDefault: true },
-                { id: 'duedate', name: 'Due Date', isDefault: true }
-              ]
-            };
-          });
-          console.log("✅ Groups loaded:", state.groups);
-        } else {
-          console.log("⚠️ No groups found");
-        }
-
-        // Create a map of taskid -> links
-        const linkMap = {};
-        if (json.tasklinks && json.tasklinks.length > 0) {
-          console.log("📦 Parsing task links:", json.tasklinks.length);
-          json.tasklinks.forEach(link => {
-            linkMap[link.taskid] = {
-              projectId: link.projectid,
-              groupId: link.groupid
-            };
-          });
-          console.log("✅ Task links mapped:", linkMap);
-        } else {
-          console.log("⚠️ No task links found");
-        }
-
-        // Parse tasks
-        let taskArray = [];
-        if (json.status === 'success' && Array.isArray(json.tasks)) {
-            taskArray = json.tasks;
-        } else if (json.data && Array.isArray(json.data)) {
-            // Fallback if format varies
-            taskArray = json.data;
-        }
-
-        console.log("📦 Parsing tasks:", taskArray.length);
-
-        if (taskArray.length > 0) {
-          state.tasks = taskArray.map(t => {
+        const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
+        const json = await res.json();
+        if (json.status === 'success' && json.data) {
+          state.tasks = json.data.map(t => {
             let extras = { duedate: "", custom: {} };
             try {
-              if (t.customattributes) extras = JSON.parse(t.customattributes);
-            } catch (e) {
-              console.warn("⚠️ Failed to parse task customattributes:", e);
-            }
-            
-            const taskId = String(t.ROWID || t.ID || t.id);
-            const links = linkMap[taskId] || {};
-            
+              if (t.attributes) extras = JSON.parse(t.attributes);
+            } catch (e) {}
             return {
-              id: taskId, 
+              id: String(t.id),
               name: t.taskname,
               status: t.status || 'Not Started',
               priority: t.priority || 'Medium',
               assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
               dueDate: extras.duedate || "",
               customFields: extras.custom || {},
-              projectId: links.projectId || state.selectedProject || 1,
-              groupId: links.groupId || getGroupIdFromStatus(t.status)
+              projectId: 1,
+              groupId: getGroupIdFromStatus(t.status)
             };
           });
-          console.log("✅ Tasks loaded:", state.tasks);
-        } else {
-           console.log("⚠️ No tasks to display");
+          renderApp();
         }
-        
-        renderApp();
-        console.log("🎉 All data loaded successfully!");
-
       } catch (e) {
-        console.error("❌ Sync Error:", e);
+        console.error("Sync Error", e);
       }
     },
 
     createTask: async (groupId) => {
       const taskData = state.ui.newTask;
-      if (!taskData.name.trim()) {
-        console.log("❌ Task name is empty");
-        return;
-      }
+      if (!taskData.name.trim()) return;
 
-      console.log("➕ Creating task:", taskData);
-      
+      const tempId = String(uid());
+      state.tasks.push({
+        id: tempId,
+        groupId,
+        projectId: state.selectedProject,
+        ...taskData
+      });
       state.ui.showNewTask = null;
-      renderApp(); 
+      renderApp();
 
       const packed = JSON.stringify({
         duedate: taskData.dueDate,
@@ -338,154 +216,60 @@
       });
 
       try {
-        await api.callProxy({
-            request_method: 'POST',
-            action: 'create',
-            entity_type: 'task',
-            user_email: state.currentUser.email,
-            taskname: taskData.name,
-            status: taskData.status,
-            priority: taskData.priority,
-            assignee: taskData.assignee ? taskData.assignee.name : 'Unassigned',
-            customattributes: packed,
-            projectid: String(state.selectedProject),
-            groupid: String(groupId)
-        });
-        
-        console.log("✅ Task created, fetching updated data...");
-        await api.fetchTasks();
+        await fetch(
+          `${ZOHO_API_URL}&request_method=POST&action=create` +
+          `&name=${encodeURIComponent(taskData.name)}` +
+          `&user_email=${state.currentUser.email}` +
+          `&status=${encodeURIComponent(taskData.status)}` +
+          `&priority=${encodeURIComponent(taskData.priority)}` +
+          `&attributes=${encodeURIComponent(packed)}`
+        );
+        api.fetchTasks();
       } catch (e) {
-        console.error("❌ Create Task Error:", e);
+        console.error("Create Error", e);
       }
     },
 
     updateTask: async (task) => {
-      if (!state.currentUser || !ZOHO_API_URL) return;
-      
-      console.log("✏️ Updating task:", task);
-      
+      if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
       try {
         const packed = JSON.stringify({
           duedate: task.dueDate || "",
           custom: task.customFields || {}
         });
 
-        await api.callProxy({
-            request_method: 'POST',
-            action: 'update',
-            entity_type: 'task',
-            user_email: state.currentUser.email,
-            id: task.id,
-            taskname: task.name,
-            status: task.status,
-            priority: task.priority,
-            assignee: task.assignee ? task.assignee.name : 'Unassigned',
-            customattributes: packed,
-            projectid: String(task.projectId),
-            groupid: String(task.groupId)
-        });
-        
-        console.log("✅ Task updated");
+        await fetch(
+          `${ZOHO_API_URL}&request_method=POST&action=update` +
+          `&id=${encodeURIComponent(task.id)}` +
+          `&name=${encodeURIComponent(task.name)}` +
+          `&user_email=${state.currentUser.email}` +
+          `&status=${encodeURIComponent(task.status)}` +
+          `&priority=${encodeURIComponent(task.priority)}` +
+          `&assignee=${encodeURIComponent(task.assignee ? task.assignee.name : 'Unassigned')}` +
+          `&attributes=${encodeURIComponent(packed)}`
+        );
       } catch (e) {
-        console.error("❌ Update Task Error:", e);
+        console.error("Update Error", e);
       }
     },
 
     deleteTask: async (id) => {
-      console.log("🗑️ Deleting task:", id);
-      
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
-      
       try {
-        await api.callProxy({
-            request_method: 'POST',
-            action: 'delete',
-            entity_type: 'task',
-            user_email: state.currentUser.email,
-            id: id
-        });
-        
-        console.log("✅ Task deleted");
+        await fetch(`${ZOHO_API_URL}&request_method=POST&action=delete&id=${encodeURIComponent(id)}`);
       } catch (e) {
-        console.error("❌ Delete Task Error:", e);
-      }
-    },
-
-    saveWorkspace: async (workspace, action) => {
-      console.log(`💾 ${action} workspace:`, workspace);
-      
-      try {
-        await api.callProxy({
-          request_method: 'POST',
-          action: action,
-          entity_type: 'workspace',
-          user_email: state.currentUser.email,
-          id: String(workspace.id),
-          name: workspace.name
-        });
-        
-        console.log("✅ Workspace saved");
-      } catch (e) {
-        console.error("❌ Workspace Save Error:", e);
-      }
-    },
-
-    saveProject: async (project, action) => {
-      console.log(`💾 ${action} project:`, project);
-      
-      try {
-        const attributes = JSON.stringify({ color: project.color });
-        await api.callProxy({
-          request_method: 'POST',
-          action: action,
-          entity_type: 'project',
-          user_email: state.currentUser.email,
-          id: String(project.id),
-          name: project.name,
-          workspaceid: String(project.workspaceId),
-          attributes: attributes
-        });
-        
-        console.log("✅ Project saved");
-      } catch (e) {
-        console.error("❌ Project Save Error:", e);
-      }
-    },
-
-    saveGroup: async (group, action) => {
-      console.log(`💾 ${action} group:`, group);
-      
-      try {
-        const attributes = JSON.stringify({
-            collapsed: group.collapsed,
-            columns: JSON.stringify(group.columns)
-        });
-
-        await api.callProxy({
-          request_method: 'POST',
-          action: action,
-          entity_type: 'group',
-          user_email: state.currentUser.email,
-          id: String(group.id),
-          name: group.name,
-          projectid: String(group.projectId),
-          attributes: attributes
-        });
-        
-        console.log("✅ Group saved");
-      } catch (e) {
-        console.error("❌ Group Save Error:", e);
+        console.error("Delete Error", e);
       }
     }
   };
 
-  // ---------- Actions (UPDATED) ----------
+  // ---------- Actions ----------
   const actions = {
     render: () => renderApp(),
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
     setView: (view) => { state.currentView = view; renderApp(); },
-    
+
     // Workspaces
     selectWorkspace: (id) => {
       state.selectedWorkspace = id;
@@ -495,11 +279,9 @@
     },
     addWorkspace: () => {
       const id = uid();
-      const newWs = { id, name: 'New Workspace' };
-      state.workspaces.push(newWs);
+      state.workspaces.push({ id, name: 'New Workspace' });
       state.selectedWorkspace = id;
       renderApp();
-      api.saveWorkspace(newWs, 'create'); // Save to DB
     },
     startEditWorkspace: (id) => {
       const ws = state.workspaces.find(w => w.id === id);
@@ -514,44 +296,41 @@
       const ws = state.workspaces.find(w => w.id === id);
       if (ws) {
         const val = input.value.trim();
-        if (val) {
-             ws.name = val;
-             api.saveWorkspace(ws, 'update'); // Save to DB
-        }
+        if (val) ws.name = val;
       }
       state.ui.editingWorkspaceId = null;
       state.ui.editingWorkspaceName = '';
       renderApp();
     },
     deleteWorkspace: (id) => {
+      // silently ignore if last workspace
       if (state.workspaces.length === 1) return;
+
       const projIds = state.projects.filter(p => p.workspaceId === id).map(p => p.id);
       state.projects = state.projects.filter(p => p.workspaceId !== id);
       state.groups = state.groups.filter(g => !projIds.includes(g.projectId));
       state.tasks = state.tasks.filter(t => !projIds.includes(t.projectId));
       state.workspaces = state.workspaces.filter(w => w.id !== id);
+
       if (state.selectedWorkspace === id) {
         state.selectedWorkspace = state.workspaces[0]?.id ?? null;
         const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
         if (proj) state.selectedProject = proj.id;
       }
       renderApp();
-      api.saveWorkspace({id}, 'delete'); // Save to DB
     },
 
     // Projects
     addProject: () => {
       const id = uid();
-      const newProj = {
+      state.projects.push({
         id,
         name: 'New Project',
         color: 'bg-green-500',
         workspaceId: state.selectedWorkspace
-      };
-      state.projects.push(newProj);
+      });
       state.selectedProject = id;
       renderApp();
-      api.saveProject(newProj, 'create'); // Save to DB
     },
     selectProject: (id) => { state.selectedProject = id; renderApp(); },
     startEditProject: (id) => {
@@ -567,10 +346,7 @@
       const p = state.projects.find(pr => pr.id === id);
       if (p) {
         const val = input.value.trim();
-        if (val) {
-            p.name = val;
-            api.saveProject(p, 'update'); // Save to DB
-        }
+        if (val) p.name = val;
       }
       state.ui.editingProjectId = null;
       state.ui.editingProjectName = '';
@@ -583,32 +359,27 @@
       const another = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
       state.selectedProject = another ? another.id : (state.projects[0]?.id ?? null);
       renderApp();
-      api.saveProject({id}, 'delete'); // Save to DB
     },
 
     // Groups
     toggleGroupCollapse: (id) => {
       const g = state.groups.find(gr => gr.id === id);
-      if (g) {
-          g.collapsed = !g.collapsed;
-          renderApp();
-          api.saveGroup(g, 'update'); // Save state
-      }
+      if (g) g.collapsed = !g.collapsed;
+      renderApp();
     },
     addGroup: () => {
       const baseGroup = state.groups.find(g => g.projectId === state.selectedProject) || state.groups[0];
       const id = uid();
-      const newGroup = {
+      state.groups.push({
         id,
         name: 'New Group',
         projectId: state.selectedProject,
         collapsed: false,
         columns: baseGroup ? JSON.parse(JSON.stringify(baseGroup.columns)) : []
-      };
-      state.groups.push(newGroup);
+      });
       renderApp();
-      api.saveGroup(newGroup, 'create'); // Save to DB
     },
+    // NEW: inline group rename (no popup)
     startEditGroup: (id) => {
       const g = state.groups.find(gr => gr.id === id);
       if (!g) return;
@@ -622,10 +393,7 @@
       const g = state.groups.find(gr => gr.id === id);
       if (g) {
         const val = input.value.trim();
-        if (val) {
-            g.name = val;
-            api.saveGroup(g, 'update'); // Save to DB
-        }
+        if (val) g.name = val;
       }
       state.ui.editingGroupId = null;
       state.ui.editingGroupName = '';
@@ -635,7 +403,6 @@
       state.groups = state.groups.filter(g => g.id !== id);
       state.tasks = state.tasks.filter(t => t.groupId !== id);
       renderApp();
-      api.saveGroup({id}, 'delete'); // Save to DB
     },
 
     // Columns
@@ -652,7 +419,6 @@
         isDefault: false
       });
       renderApp();
-      api.saveGroup(g, 'update'); // Save columns to DB
     },
     renameColumn: (groupId, colId) => {
       const input = document.getElementById(`col-name-${groupId}-${colId}`);
@@ -663,7 +429,6 @@
       if (col) {
         col.name = input.value.trim() || col.name;
         renderApp();
-        api.saveGroup(g, 'update'); // Save columns to DB
       }
     },
     deleteColumn: (groupId, colId) => {
@@ -676,7 +441,6 @@
         }
       });
       renderApp();
-      api.saveGroup(g, 'update'); // Save columns to DB
     },
 
     // Tasks
@@ -698,6 +462,7 @@
       api.createTask(groupId);
     },
     deleteTask: (id) => api.deleteTask(id),
+
     startEditTaskName: (id) => {
       state.ui.editingTaskId = id;
       renderApp();
@@ -718,9 +483,11 @@
         renderApp();
       }
     },
+
     updateTaskField: (id, field, value, extra) => {
       const t = state.tasks.find(task => task.id === id);
       if (!t) return;
+
       if (field === 'assignee') {
         t.assignee = value ? { name: value } : null;
       } else if (field === 'custom') {
@@ -733,6 +500,7 @@
       renderApp();
       api.updateTask(t);
     },
+
     moveTaskToGroup: (id, groupId) => {
       const t = state.tasks.find(task => task.id === id);
       if (!t) return;
@@ -753,12 +521,15 @@
     const textColor = darkMode ? 'text-gray-100' : 'text-gray-800';
     const borderColor = darkMode ? 'border-gray-800' : 'border-gray-200';
     const hoverBg = darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100';
+
     const wsHtml = workspaces.map(ws => {
       const isActive = ws.id === selectedWorkspace;
       const rowClasses = isActive
         ? 'bg-blue-600 text-white hover:bg-blue-700'
         : `${hoverBg} ${textColor}`;
+
       const isEditing = ui.editingWorkspaceId === ws.id;
+
       const nameCell = isEditing
         ? `
           <div class="flex-1">
@@ -774,6 +545,7 @@
             <span class="text-sm font-medium">${ws.name}</span>
           </div>
         `;
+
       return `
         <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
           ${nameCell}
@@ -790,6 +562,7 @@
         </div>
       `;
     }).join('');
+
     const projHtml = projects
       .filter(p => p.workspaceId === selectedWorkspace)
       .map(p => {
@@ -797,7 +570,9 @@
         const rowClasses = isActive
           ? 'bg-blue-100 text-blue-800'
           : `${hoverBg} ${textColor}`;
+
         const isEditing = ui.editingProjectId === p.id;
+
         const nameCell = isEditing
           ? `
             <div class="flex items-center gap-2 flex-1">
@@ -816,6 +591,7 @@
               <span class="text-sm">${p.name}</span>
             </div>
           `;
+
         return `
           <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
             ${nameCell}
@@ -834,11 +610,13 @@
       }).join('') || `
         <div class="text-xs text-gray-400 mt-1">No projects in this workspace.</div>
       `;
+
     return `
       <div class="w-72 ${cardBg} border-r ${borderColor} flex flex-col h-full">
         <div class="p-6 border-b ${borderColor}">
           <h1 class="text-2xl font-bold ${textColor}">WellTask</h1>
         </div>
+
         <nav class="flex-1 p-4 space-y-6 overflow-y-auto">
           <div>
             <div class="flex items-center justify-between mb-2">
@@ -850,6 +628,7 @@
             </div>
             ${wsHtml}
           </div>
+
           <div>
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Projects</span>
@@ -861,6 +640,7 @@
             ${projHtml}
           </div>
         </nav>
+
         <div class="p-4 border-t ${borderColor}">
           <button onclick="actions.toggleTheme()"
                   class="w-full flex items-center justify-between px-4 py-3 rounded-lg ${hoverBg} ${textColor}">
@@ -880,7 +660,9 @@
     const textColor = darkMode ? 'text-gray-100' : 'text-gray-900';
     const subtleText = darkMode ? 'text-gray-400' : 'text-gray-500';
     const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
+
     const project = projects.find(p => p.id === selectedProject);
+
     const header = `
       <div class="flex items-center justify-between mb-6">
         <div>
@@ -899,11 +681,13 @@
         </div>
       </div>
     `;
+
     const columns = groups
       .filter(g => g.projectId === selectedProject)
       .map(grp => {
         const grpTasks = tasks.filter(t => t.groupId === grp.id);
         const isEditingGroup = ui.editingGroupId === grp.id;
+
         return `
           <div class="${panelBg} border ${borderColor} rounded-2xl p-4 flex flex-col h-full max-h-[80vh] shadow-sm">
             <div class="flex items-center justify-between mb-4">
@@ -936,7 +720,9 @@
                 </button>
               </div>
             </div>
+
             ${ui.columnsGroupId === grp.id ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
+
             <div class="flex-1 overflow-y-auto space-y-3 pr-1 ${grp.collapsed ? 'hidden' : ''}">
               ${grpTasks.map(t => `
                 <div class="bg-white dark:bg-gray-700 p-3 rounded-lg border ${borderColor} shadow-sm hover:shadow-md transition">
@@ -980,6 +766,7 @@
                 </div>
               `).join('')}
             </div>
+
             <div class="mt-3 pt-3 border-t ${borderColor} ${grp.collapsed ? 'hidden' : ''}">
               ${
                 ui.showNewTask === grp.id
@@ -1006,6 +793,7 @@
           </div>
         `;
       }).join('');
+
     return `
       <div class="p-6 h-full overflow-auto ${pageBg}">
         ${header}
@@ -1055,7 +843,9 @@
     const textColor = darkMode ? 'text-gray-100' : 'text-gray-900';
     const subtleText = darkMode ? 'text-gray-400' : 'text-gray-500';
     const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
+
     const project = projects.find(p => p.id === selectedProject);
+
     const header = `
       <div class="flex items-center justify-between mb-6">
         <div>
@@ -1074,15 +864,18 @@
         </div>
       </div>
     `;
+
     const groupBlocks = groups
       .filter(grp => grp.projectId === selectedProject)
       .map(grp => {
         const grpTasks = tasks.filter(t => t.groupId === grp.id);
         const cols = grp.columns;
         const isEditingGroup = ui.editingGroupId === grp.id;
+
         const headerCols = cols.map(col => `
           <div class="flex-1 text-xs font-semibold ${subtleText}">${col.name}</div>
         `).join('') + `<div class="w-16 text-xs font-semibold ${subtleText} text-right">Actions</div>`;
+
         const rows = grpTasks.map(t => `
           <div class="grid grid-cols-[repeat(${cols.length},minmax(0,1fr))_80px] items-center border-t ${borderColor} px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
             ${cols.map(col => renderCellForColumn(col, t, borderColor)).join('')}
@@ -1097,6 +890,7 @@
             No tasks yet. Click "Add Task" to create one.
           </div>
         `;
+
         return `
           <div class="mb-6 rounded-2xl overflow-hidden border ${borderColor} shadow-sm ${cardBg}">
             <div class="flex items-center justify-between px-4 py-3 border-b ${borderColor}">
@@ -1131,7 +925,9 @@
                 </button>
               </div>
             </div>
+
             ${ui.columnsGroupId === grp.id ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
+
             <div class="${grp.collapsed ? 'hidden' : 'block'}">
               <div class="overflow-x-auto">
                 <div class="min-w-[1000px]">
@@ -1141,6 +937,7 @@
                   ${rows}
                 </div>
               </div>
+
               <div class="border-t ${borderColor} px-4 py-3 bg-gray-50 dark:bg-gray-900">
                 ${
                   ui.showNewTask === grp.id
@@ -1168,6 +965,7 @@
           </div>
         `;
       }).join('');
+
     return `
       <div class="p-6 h-full overflow-auto ${pageBg}">
         ${header}
@@ -1179,6 +977,7 @@
   function renderCellForColumn(col, t, borderColor) {
     const baseInput =
       `class="w-full px-2 py-1 text-sm border ${borderColor} rounded bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"`;
+
     if (col.id === 'task') {
       if (state.ui.editingTaskId === t.id) {
         return `
@@ -1201,6 +1000,7 @@
         </div>
       `;
     }
+
     if (col.id === 'assignee') {
       const assigneeName = t.assignee ? t.assignee.name : '';
       const currentName = state.currentUser ? state.currentUser.name : 'Owner';
@@ -1216,6 +1016,7 @@
         </div>
       `;
     }
+
     if (col.id === 'priority') {
       const priorities = ['Low', 'Medium', 'High', 'Critical'];
       const pillClass = priorityClass(t.priority);
@@ -1231,6 +1032,7 @@
         </div>
       `;
     }
+
     if (col.id === 'status') {
       const statuses = ['Not Started', 'In Progress', 'Done'];
       return `
@@ -1244,6 +1046,7 @@
         </div>
       `;
     }
+
     if (col.id === 'duedate') {
       return `
         <div class="flex-1 mr-2">
@@ -1253,6 +1056,7 @@
         </div>
       `;
     }
+
     const val = (t.customFields && t.customFields[col.id]) || '';
     return `
       <div class="flex-1 mr-2">
@@ -1274,11 +1078,13 @@
 
   function renderApp() {
     const app = document.getElementById('app');
+
     if (state.showLogin) {
       app.innerHTML = renderLogin();
     } else {
       document.documentElement.classList.toggle('dark', state.darkMode);
       const bgColor = state.darkMode ? 'bg-gray-900' : 'bg-gray-50';
+
       app.innerHTML = `
         <div class="flex h-screen ${bgColor}">
           ${renderSidebar()}
@@ -1292,12 +1098,9 @@
   }
 
   setInterval(() => {
-    if (state.currentUser && !state.ui.editingTaskId) {
-      api.fetchTasks();
-    }
-  }, 5000);
+    if (state.currentUser) api.fetchTasks();
+  }, 3000);
 
-  // Initial fetch
   if (state.currentUser) api.fetchTasks();
   renderApp();
 </script>
