@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,6 +31,7 @@
 <div id="app"></div>
 
 <script>
+  // PASTE YOUR WEBHOOK URL HERE
   const ZOHO_API_URL = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360";
 
   // ---------- Auth ----------
@@ -65,9 +65,8 @@
     currentUser,
     showLogin: !currentUser,
 
-    workspaces: [
-      { id: 1, name: 'My Workspace' }
-    ],
+    // defaults (will be overwritten by syncAll if data exists)
+    workspaces: [ { id: 1, name: 'My Workspace' } ],
     selectedWorkspace: 1,
 
     projects: [
@@ -78,43 +77,16 @@
 
     groups: [
       {
-        id: 1,
-        name: 'To Do',
-        projectId: 1,
-        collapsed: false,
-        columns: [
-          { id: 'task', name: 'Task', isDefault: true },
-          { id: 'assignee', name: 'Assignee', isDefault: true },
-          { id: 'priority', name: 'Priority', isDefault: true },
-          { id: 'status', name: 'Status', isDefault: true },
-          { id: 'duedate', name: 'Due Date', isDefault: true }
-        ]
+        id: 1, name: 'To Do', projectId: 1, collapsed: false,
+        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
       },
       {
-        id: 2,
-        name: 'In Progress',
-        projectId: 1,
-        collapsed: false,
-        columns: [
-          { id: 'task', name: 'Task', isDefault: true },
-          { id: 'assignee', name: 'Assignee', isDefault: true },
-          { id: 'priority', name: 'Priority', isDefault: true },
-          { id: 'status', name: 'Status', isDefault: true },
-          { id: 'duedate', name: 'Due Date', isDefault: true }
-        ]
+        id: 2, name: 'In Progress', projectId: 1, collapsed: false,
+        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
       },
       {
-        id: 3,
-        name: 'Done',
-        projectId: 1,
-        collapsed: false,
-        columns: [
-          { id: 'task', name: 'Task', isDefault: true },
-          { id: 'assignee', name: 'Assignee', isDefault: true },
-          { id: 'priority', name: 'Priority', isDefault: true },
-          { id: 'status', name: 'Status', isDefault: true },
-          { id: 'duedate', name: 'Due Date', isDefault: true }
-        ]
+        id: 3, name: 'Done', projectId: 1, collapsed: false,
+        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
       }
     ],
 
@@ -122,26 +94,12 @@
 
     ui: {
       showNewTask: null,
-      newTask: {
-        name: '',
-        assignee: null,
-        priority: 'Medium',
-        status: 'Not Started',
-        dueDate: '',
-        customFields: {}
-      },
+      newTask: { name: '', assignee: null, priority: 'Medium', status: 'Not Started', dueDate: '', customFields: {} },
       columnsGroupId: null,
-
-      editingWorkspaceId: null,
-      editingWorkspaceName: '',
-
-      editingProjectId: null,
-      editingProjectName: '',
-
-      editingTaskId: null,       // inline task rename flag
-
-      editingGroupId: null,      // NEW: inline group rename
-      editingGroupName: ''
+      editingWorkspaceId: null, editingWorkspaceName: '',
+      editingProjectId: null, editingProjectName: '',
+      editingTaskId: null,
+      editingGroupId: null, editingGroupName: ''
     }
   };
 
@@ -149,6 +107,7 @@
 
   // ---------- Helpers ----------
   function getGroupIdFromStatus(status) {
+    // Simple fallback mapping
     if (status === 'In Progress') return 2;
     if (status === 'Done') return 3;
     return 1;
@@ -166,17 +125,62 @@
 
   // ---------- API ----------
   const api = {
-    fetchTasks: async () => {
+    // 1. SYNC ALL (Load Tasks & Metadata)
+    syncAll: async () => {
       if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
       try {
         const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
         const json = await res.json();
+        
         if (json.status === 'success' && json.data) {
-          state.tasks = json.data.map(t => {
+          const serverTasks = json.data.tasks || [];
+          const serverMeta = json.data.metadata || [];
+
+          // A. Load Metadata (Workspaces, Projects, Groups)
+          if(serverMeta.length > 0) {
+              const workspaces = [];
+              const projects = [];
+              const groups = [];
+              
+              serverMeta.forEach(m => {
+                  let attrs = {};
+                  try { attrs = JSON.parse(m.attributes); } catch(e){}
+                  
+                  if(m.recordtype === 'workspace') {
+                      workspaces.push({ id: String(m.id), name: m.name });
+                  } else if(m.recordtype === 'project') {
+                      projects.push({ id: String(m.id), name: m.name, workspaceId: m.relatedid, color: attrs.color || 'bg-blue-500' });
+                  } else if(m.recordtype === 'group') {
+                      groups.push({ 
+                          id: String(m.id), 
+                          name: m.name, 
+                          projectId: m.relatedid, 
+                          collapsed: attrs.collapsed || false,
+                          columns: attrs.columns || [] 
+                      });
+                  }
+              });
+              
+              // If we have data from server, replace local defaults
+              if(workspaces.length) state.workspaces = workspaces;
+              if(projects.length) state.projects = projects;
+              if(groups.length) state.groups = groups;
+          }
+
+          // B. Load Tasks
+          state.tasks = serverTasks.map(t => {
             let extras = { duedate: "", custom: {} };
-            try {
-              if (t.attributes) extras = JSON.parse(t.attributes);
-            } catch (e) {}
+            try { if (t.customattributes) extras = JSON.parse(t.customattributes); } catch (e) {}
+            
+            // Try to find the group based on status or existing groups
+            let gId = getGroupIdFromStatus(t.status);
+            // If we have dynamic groups loaded, try to match ID if stored (advanced) or stick to status mapping
+            // For this version, we rely on status mapping for basic groups, or default to first group
+            if(state.groups.length > 0 && !['Not Started','In Progress','Done'].includes(t.status)) {
+                 // If status doesn't match standard, maybe assign to first group
+                 gId = state.groups[0].id;
+            }
+
             return {
               id: String(t.id),
               name: t.taskname,
@@ -185,10 +189,15 @@
               assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
               dueDate: extras.duedate || "",
               customFields: extras.custom || {},
-              projectId: 1,
-              groupId: getGroupIdFromStatus(t.status)
+              projectId: state.selectedProject, // Simplified: assumes tasks belong to selected view
+              groupId: gId
             };
           });
+
+          // Validation check for selected IDs
+          if(!state.workspaces.find(w => w.id == state.selectedWorkspace)) state.selectedWorkspace = state.workspaces[0]?.id;
+          if(!state.projects.find(p => p.id == state.selectedProject)) state.selectedProject = state.projects[0]?.id;
+
           renderApp();
         }
       } catch (e) {
@@ -196,10 +205,34 @@
       }
     },
 
+    // 2. SAVE METADATA (Projects, Groups, Workspaces)
+    saveMetadata: async (action, type, data) => {
+         const payload = {
+             name: data.name,
+             recordtype: type,
+             relatedid: data.relatedId || "",
+             attributes: JSON.stringify(data.attributes || {})
+         };
+         
+         let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${state.currentUser.email}`;
+         for (const [key, value] of Object.entries(payload)) {
+             url += `&${key}=${encodeURIComponent(value)}`;
+         }
+         if(data.id && action !== 'create') url += `&id=${data.id}`;
+
+         try {
+             await fetch(url);
+             // If we created something, we need the real ID from the server, so we sync
+             if(action === 'create') api.syncAll(); 
+         } catch(e) { console.error(e); }
+    },
+
+    // 3. TASK OPERATIONS
     createTask: async (groupId) => {
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
+      // Optimistic UI
       const tempId = String(uid());
       state.tasks.push({
         id: tempId,
@@ -217,14 +250,16 @@
 
       try {
         await fetch(
-          `${ZOHO_API_URL}&request_method=POST&action=create` +
+          `${ZOHO_API_URL}&request_method=POST&type=task&action=create` +
           `&name=${encodeURIComponent(taskData.name)}` +
           `&user_email=${state.currentUser.email}` +
           `&status=${encodeURIComponent(taskData.status)}` +
           `&priority=${encodeURIComponent(taskData.priority)}` +
+          `&assignee=${encodeURIComponent(taskData.assignee ? taskData.assignee.name : 'Unassigned')}` + 
           `&attributes=${encodeURIComponent(packed)}`
         );
-        api.fetchTasks();
+        // Fetch to get real ID
+        await api.syncAll(); 
       } catch (e) {
         console.error("Create Error", e);
       }
@@ -239,7 +274,7 @@
         });
 
         await fetch(
-          `${ZOHO_API_URL}&request_method=POST&action=update` +
+          `${ZOHO_API_URL}&request_method=POST&type=task&action=update` +
           `&id=${encodeURIComponent(task.id)}` +
           `&name=${encodeURIComponent(task.name)}` +
           `&user_email=${state.currentUser.email}` +
@@ -257,7 +292,7 @@
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
       try {
-        await fetch(`${ZOHO_API_URL}&request_method=POST&action=delete&id=${encodeURIComponent(id)}`);
+        await fetch(`${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`);
       } catch (e) {
         console.error("Delete Error", e);
       }
@@ -272,19 +307,21 @@
 
     // Workspaces
     selectWorkspace: (id) => {
-      state.selectedWorkspace = id;
-      const proj = state.projects.find(p => p.workspaceId === id);
+      state.selectedWorkspace = String(id);
+      const proj = state.projects.find(p => p.workspaceId == id);
       if (proj) state.selectedProject = proj.id;
       renderApp();
     },
     addWorkspace: () => {
-      const id = uid();
-      state.workspaces.push({ id, name: 'New Workspace' });
+      const id = String(uid());
+      const newWS = { id, name: 'New Workspace' };
+      state.workspaces.push(newWS);
       state.selectedWorkspace = id;
       renderApp();
+      api.saveMetadata('create', 'workspace', newWS);
     },
     startEditWorkspace: (id) => {
-      const ws = state.workspaces.find(w => w.id === id);
+      const ws = state.workspaces.find(w => w.id == id);
       if (!ws) return;
       state.ui.editingWorkspaceId = id;
       state.ui.editingWorkspaceName = ws.name;
@@ -293,48 +330,50 @@
     saveWorkspaceName: (id) => {
       const input = document.getElementById(`ws-name-input-${id}`);
       if (!input) return;
-      const ws = state.workspaces.find(w => w.id === id);
+      const ws = state.workspaces.find(w => w.id == id);
       if (ws) {
         const val = input.value.trim();
-        if (val) ws.name = val;
+        if (val) {
+            ws.name = val;
+            api.saveMetadata('update', 'workspace', ws);
+        }
       }
       state.ui.editingWorkspaceId = null;
       state.ui.editingWorkspaceName = '';
       renderApp();
     },
     deleteWorkspace: (id) => {
-      // silently ignore if last workspace
       if (state.workspaces.length === 1) return;
-
-      const projIds = state.projects.filter(p => p.workspaceId === id).map(p => p.id);
-      state.projects = state.projects.filter(p => p.workspaceId !== id);
-      state.groups = state.groups.filter(g => !projIds.includes(g.projectId));
-      state.tasks = state.tasks.filter(t => !projIds.includes(t.projectId));
-      state.workspaces = state.workspaces.filter(w => w.id !== id);
-
-      if (state.selectedWorkspace === id) {
+      state.workspaces = state.workspaces.filter(w => w.id != id);
+      // In real app, we'd delete children too, but for now we just remove the WS
+      if (state.selectedWorkspace == id) {
         state.selectedWorkspace = state.workspaces[0]?.id ?? null;
-        const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
-        if (proj) state.selectedProject = proj.id;
       }
       renderApp();
+      api.saveMetadata('delete', 'workspace', { id });
     },
 
     // Projects
     addProject: () => {
-      const id = uid();
-      state.projects.push({
+      const id = String(uid());
+      const newProj = {
         id,
         name: 'New Project',
         color: 'bg-green-500',
         workspaceId: state.selectedWorkspace
-      });
+      };
+      state.projects.push(newProj);
       state.selectedProject = id;
       renderApp();
+      api.saveMetadata('create', 'project', { 
+          name: newProj.name, 
+          relatedId: newProj.workspaceId,
+          attributes: { color: newProj.color }
+      });
     },
-    selectProject: (id) => { state.selectedProject = id; renderApp(); },
+    selectProject: (id) => { state.selectedProject = String(id); renderApp(); },
     startEditProject: (id) => {
-      const p = state.projects.find(pr => pr.id === id);
+      const p = state.projects.find(pr => pr.id == id);
       if (!p) return;
       state.ui.editingProjectId = id;
       state.ui.editingProjectName = p.name;
@@ -343,45 +382,62 @@
     saveProjectName: (id) => {
       const input = document.getElementById(`proj-name-input-${id}`);
       if (!input) return;
-      const p = state.projects.find(pr => pr.id === id);
+      const p = state.projects.find(pr => pr.id == id);
       if (p) {
         const val = input.value.trim();
-        if (val) p.name = val;
+        if (val) {
+            p.name = val;
+            api.saveMetadata('update', 'project', { 
+                id: p.id, 
+                name: p.name, 
+                relatedId: p.workspaceId,
+                attributes: { color: p.color } 
+            });
+        }
       }
       state.ui.editingProjectId = null;
       state.ui.editingProjectName = '';
       renderApp();
     },
     deleteProject: (id) => {
-      state.groups = state.groups.filter(g => g.projectId !== id);
-      state.tasks = state.tasks.filter(t => t.projectId !== id);
-      state.projects = state.projects.filter(p => p.id !== id);
-      const another = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
+      state.projects = state.projects.filter(p => p.id != id);
+      const another = state.projects.find(p => p.workspaceId == state.selectedWorkspace);
       state.selectedProject = another ? another.id : (state.projects[0]?.id ?? null);
       renderApp();
+      api.saveMetadata('delete', 'project', { id });
     },
 
     // Groups
     toggleGroupCollapse: (id) => {
-      const g = state.groups.find(gr => gr.id === id);
-      if (g) g.collapsed = !g.collapsed;
-      renderApp();
+      const g = state.groups.find(gr => gr.id == id);
+      if (g) {
+          g.collapsed = !g.collapsed;
+          renderApp();
+          api.saveMetadata('update', 'group', { 
+              id: g.id, name: g.name, relatedId: g.projectId,
+              attributes: { collapsed: g.collapsed, columns: g.columns }
+          });
+      }
     },
     addGroup: () => {
-      const baseGroup = state.groups.find(g => g.projectId === state.selectedProject) || state.groups[0];
-      const id = uid();
-      state.groups.push({
+      const baseGroup = state.groups.find(g => g.projectId == state.selectedProject) || state.groups[0];
+      const id = String(uid());
+      const newGroup = {
         id,
         name: 'New Group',
         projectId: state.selectedProject,
         collapsed: false,
         columns: baseGroup ? JSON.parse(JSON.stringify(baseGroup.columns)) : []
-      });
+      };
+      state.groups.push(newGroup);
       renderApp();
+      api.saveMetadata('create', 'group', { 
+          name: newGroup.name, relatedId: newGroup.projectId,
+          attributes: { collapsed: false, columns: newGroup.columns }
+      });
     },
-    // NEW: inline group rename (no popup)
     startEditGroup: (id) => {
-      const g = state.groups.find(gr => gr.id === id);
+      const g = state.groups.find(gr => gr.id == id);
       if (!g) return;
       state.ui.editingGroupId = id;
       state.ui.editingGroupName = g.name;
@@ -390,28 +446,35 @@
     saveGroupName: (id) => {
       const input = document.getElementById(`group-name-input-${id}`);
       if (!input) return;
-      const g = state.groups.find(gr => gr.id === id);
+      const g = state.groups.find(gr => gr.id == id);
       if (g) {
         const val = input.value.trim();
-        if (val) g.name = val;
+        if (val) {
+            g.name = val;
+            api.saveMetadata('update', 'group', { 
+                id: g.id, name: g.name, relatedId: g.projectId,
+                attributes: { collapsed: g.collapsed, columns: g.columns }
+            });
+        }
       }
       state.ui.editingGroupId = null;
       state.ui.editingGroupName = '';
       renderApp();
     },
     deleteGroup: (id) => {
-      state.groups = state.groups.filter(g => g.id !== id);
-      state.tasks = state.tasks.filter(t => t.groupId !== id);
+      state.groups = state.groups.filter(g => g.id != id);
+      state.tasks = state.tasks.filter(t => t.groupId != id);
       renderApp();
+      api.saveMetadata('delete', 'group', { id });
     },
 
-    // Columns
+    // Columns (Saves as update to Group)
     toggleColumnsPanel: (groupId) => {
       state.ui.columnsGroupId = state.ui.columnsGroupId === groupId ? null : groupId;
       renderApp();
     },
     addColumn: (groupId) => {
-      const g = state.groups.find(gr => gr.id === groupId);
+      const g = state.groups.find(gr => gr.id == groupId);
       if (!g) return;
       g.columns.push({
         id: 'col_' + uid(),
@@ -419,28 +482,42 @@
         isDefault: false
       });
       renderApp();
+      api.saveMetadata('update', 'group', { 
+          id: g.id, name: g.name, relatedId: g.projectId,
+          attributes: { collapsed: g.collapsed, columns: g.columns }
+      });
     },
     renameColumn: (groupId, colId) => {
       const input = document.getElementById(`col-name-${groupId}-${colId}`);
       if (!input) return;
-      const g = state.groups.find(gr => gr.id === groupId);
+      const g = state.groups.find(gr => gr.id == groupId);
       if (!g) return;
       const col = g.columns.find(c => c.id === colId);
       if (col) {
         col.name = input.value.trim() || col.name;
         renderApp();
+        // Debouncing would be better here, but for now we save on rename
+        api.saveMetadata('update', 'group', { 
+            id: g.id, name: g.name, relatedId: g.projectId,
+            attributes: { collapsed: g.collapsed, columns: g.columns }
+        });
       }
     },
     deleteColumn: (groupId, colId) => {
-      const g = state.groups.find(gr => gr.id === groupId);
+      const g = state.groups.find(gr => gr.id == groupId);
       if (!g) return;
       g.columns = g.columns.filter(c => c.id !== colId);
+      // Remove data from tasks
       state.tasks.forEach(t => {
         if (t.customFields && t.customFields[colId] !== undefined) {
           delete t.customFields[colId];
         }
       });
       renderApp();
+      api.saveMetadata('update', 'group', { 
+          id: g.id, name: g.name, relatedId: g.projectId,
+          attributes: { collapsed: g.collapsed, columns: g.columns }
+      });
     },
 
     // Tasks
@@ -450,6 +527,7 @@
         name: '',
         assignee: null,
         priority: 'Medium',
+        // status based on group 
         status: (groupId === 2 ? 'In Progress' : (groupId === 3 ? 'Done' : 'Not Started')),
         dueDate: '',
         customFields: {}
@@ -471,7 +549,7 @@
     },
     saveTaskName: (id) => {
       const input = document.getElementById(`task-name-input-${id}`);
-      const t = state.tasks.find(task => task.id === id);
+      const t = state.tasks.find(task => task.id == id);
       if (t && input) {
         const val = input.value.trim();
         if (val) t.name = val;
@@ -485,7 +563,7 @@
     },
 
     updateTaskField: (id, field, value, extra) => {
-      const t = state.tasks.find(task => task.id === id);
+      const t = state.tasks.find(task => task.id == id);
       if (!t) return;
 
       if (field === 'assignee') {
@@ -502,7 +580,7 @@
     },
 
     moveTaskToGroup: (id, groupId) => {
-      const t = state.tasks.find(task => task.id === id);
+      const t = state.tasks.find(task => task.id == id);
       if (!t) return;
       t.groupId = groupId;
       if (groupId === 1) t.status = 'Not Started';
@@ -523,12 +601,12 @@
     const hoverBg = darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100';
 
     const wsHtml = workspaces.map(ws => {
-      const isActive = ws.id === selectedWorkspace;
+      const isActive = String(ws.id) === String(selectedWorkspace);
       const rowClasses = isActive
         ? 'bg-blue-600 text-white hover:bg-blue-700'
         : `${hoverBg} ${textColor}`;
 
-      const isEditing = ui.editingWorkspaceId === ws.id;
+      const isEditing = String(ui.editingWorkspaceId) === String(ws.id);
 
       const nameCell = isEditing
         ? `
@@ -536,12 +614,12 @@
             <input id="ws-name-input-${ws.id}" value="${ui.editingWorkspaceName}"
                    class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
                    autofocus
-                   onblur="actions.saveWorkspaceName(${ws.id})"
-                   onkeypress="if(event.key==='Enter'){actions.saveWorkspaceName(${ws.id})}" />
+                   onblur="actions.saveWorkspaceName('${ws.id}')"
+                   onkeypress="if(event.key==='Enter'){actions.saveWorkspaceName('${ws.id}')}" />
           </div>
         `
         : `
-          <div class="flex-1 cursor-pointer" onclick="actions.selectWorkspace(${ws.id})">
+          <div class="flex-1 cursor-pointer" onclick="actions.selectWorkspace('${ws.id}')">
             <span class="text-sm font-medium">${ws.name}</span>
           </div>
         `;
@@ -550,11 +628,11 @@
         <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
           ${nameCell}
           <div class="flex items-center gap-1 text-xs">
-            <button onclick="event.stopPropagation(); actions.startEditWorkspace(${ws.id})"
+            <button onclick="event.stopPropagation(); actions.startEditWorkspace('${ws.id}')"
                     class="opacity-80 hover:opacity-100">
               <i data-lucide="edit-2" class="w-3 h-3"></i>
             </button>
-            <button onclick="event.stopPropagation(); actions.deleteWorkspace(${ws.id})"
+            <button onclick="event.stopPropagation(); actions.deleteWorkspace('${ws.id}')"
                     class="opacity-80 hover:opacity-100">
               <i data-lucide="trash-2" class="w-3 h-3"></i>
             </button>
@@ -564,14 +642,14 @@
     }).join('');
 
     const projHtml = projects
-      .filter(p => p.workspaceId === selectedWorkspace)
+      .filter(p => String(p.workspaceId) === String(selectedWorkspace))
       .map(p => {
-        const isActive = p.id === selectedProject;
+        const isActive = String(p.id) === String(selectedProject);
         const rowClasses = isActive
           ? 'bg-blue-100 text-blue-800'
           : `${hoverBg} ${textColor}`;
 
-        const isEditing = ui.editingProjectId === p.id;
+        const isEditing = String(ui.editingProjectId) === String(p.id);
 
         const nameCell = isEditing
           ? `
@@ -580,13 +658,13 @@
               <input id="proj-name-input-${p.id}" value="${ui.editingProjectName}"
                      class="w-full bg-transparent text-sm outline-none border-b border-blue-300 text-inherit"
                      autofocus
-                     onblur="actions.saveProjectName(${p.id})"
-                     onkeypress="if(event.key==='Enter'){actions.saveProjectName(${p.id})}" />
+                     onblur="actions.saveProjectName('${p.id}')"
+                     onkeypress="if(event.key==='Enter'){actions.saveProjectName('${p.id}')}" />
             </div>
           `
           : `
             <div class="flex items-center gap-2 flex-1 cursor-pointer"
-                 onclick="actions.selectProject(${p.id})">
+                 onclick="actions.selectProject('${p.id}')">
               <span class="w-2 h-2 rounded-full ${p.color}"></span>
               <span class="text-sm">${p.name}</span>
             </div>
@@ -596,11 +674,11 @@
           <div class="flex items-center justify-between px-3 py-2 rounded-lg mb-1 ${rowClasses}">
             ${nameCell}
             <div class="flex items-center gap-1 text-xs">
-              <button onclick="event.stopPropagation(); actions.startEditProject(${p.id})"
+              <button onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"
                       class="opacity-80 hover:opacity-100">
                 <i data-lucide="edit-2" class="w-3 h-3"></i>
               </button>
-              <button onclick="event.stopPropagation(); actions.deleteProject(${p.id})"
+              <button onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"
                       class="opacity-80 hover:opacity-100">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
               </button>
@@ -661,7 +739,7 @@
     const subtleText = darkMode ? 'text-gray-400' : 'text-gray-500';
     const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
 
-    const project = projects.find(p => p.id === selectedProject);
+    const project = projects.find(p => String(p.id) === String(selectedProject));
 
     const header = `
       <div class="flex items-center justify-between mb-6">
@@ -683,16 +761,16 @@
     `;
 
     const columns = groups
-      .filter(g => g.projectId === selectedProject)
+      .filter(g => String(g.projectId) === String(selectedProject))
       .map(grp => {
-        const grpTasks = tasks.filter(t => t.groupId === grp.id);
-        const isEditingGroup = ui.editingGroupId === grp.id;
+        const grpTasks = tasks.filter(t => String(t.groupId) === String(grp.id));
+        const isEditingGroup = String(ui.editingGroupId) === String(grp.id);
 
         return `
           <div class="${panelBg} border ${borderColor} rounded-2xl p-4 flex flex-col h-full max-h-[80vh] shadow-sm">
             <div class="flex items-center justify-between mb-4">
               <div class="flex items-center gap-2">
-                <button onclick="actions.toggleGroupCollapse(${grp.id})"
+                <button onclick="actions.toggleGroupCollapse('${grp.id}')"
                         class="${subtleText} hover:text-gray-600">
                   <i data-lucide="${grp.collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
                 </button>
@@ -701,27 +779,27 @@
                     ? `<input id="group-name-input-${grp.id}" value="${ui.editingGroupName}"
                                class="text-sm font-semibold bg-transparent outline-none border-b border-blue-300 text-${darkMode ? 'gray-100' : 'gray-900'}"
                                autofocus
-                               onblur="actions.saveGroupName(${grp.id})"
-                               onkeypress="if(event.key==='Enter'){actions.saveGroupName(${grp.id})}" />`
+                               onblur="actions.saveGroupName('${grp.id}')"
+                               onkeypress="if(event.key==='Enter'){actions.saveGroupName('${grp.id}')}" />`
                     : `<h2 class="text-sm font-semibold ${textColor}">${grp.name}</h2>`
                 }
                 <span class="bg-gray-100 dark:bg-gray-900 ${subtleText} text-xs px-2 py-1 rounded-full">${grpTasks.length}</span>
               </div>
               <div class="flex items-center gap-2 ${subtleText}">
-                <button onclick="actions.toggleColumnsPanel(${grp.id})"
+                <button onclick="actions.toggleColumnsPanel('${grp.id}')"
                         class="hover:text-gray-700 text-xs flex items-center gap-1">
                   <i data-lucide="columns-3" class="w-3 h-3"></i> Columns
                 </button>
-                <button onclick="actions.startEditGroup(${grp.id})" class="hover:text-gray-700">
+                <button onclick="actions.startEditGroup('${grp.id}')" class="hover:text-gray-700">
                   <i data-lucide="edit-2" class="w-4 h-4"></i>
                 </button>
-                <button onclick="actions.deleteGroup(${grp.id})" class="hover:text-red-600 text-red-500">
+                <button onclick="actions.deleteGroup('${grp.id}')" class="hover:text-red-600 text-red-500">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </div>
             </div>
 
-            ${ui.columnsGroupId === grp.id ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
+            ${String(ui.columnsGroupId) === String(grp.id) ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
 
             <div class="flex-1 overflow-y-auto space-y-3 pr-1 ${grp.collapsed ? 'hidden' : ''}">
               ${grpTasks.map(t => `
@@ -729,7 +807,7 @@
                   <div class="flex items-start justify-between gap-2 mb-2">
                     <div class="flex-1">
                       ${
-                        ui.editingTaskId === t.id
+                        String(ui.editingTaskId) === String(t.id)
                           ? `<input id="task-name-input-${t.id}" value="${t.name}"
                                     class="w-full text-sm font-medium bg-transparent outline-none border-b border-blue-300 text-gray-900 dark:text-gray-50"
                                     autofocus
@@ -753,8 +831,8 @@
                     <div class="flex items-center gap-2">
                       <select onchange="actions.moveTaskToGroup('${t.id}', parseInt(this.value))"
                               class="bg-gray-100 dark:bg-gray-800 rounded px-2 py-1">
-                        ${groups.filter(g => g.projectId === selectedProject).map(g => `
-                          <option value="${g.id}" ${g.id === t.groupId ? 'selected' : ''}>${g.name}</option>
+                        ${groups.filter(g => String(g.projectId) === String(selectedProject)).map(g => `
+                          <option value="${g.id}" ${String(g.id) === String(t.groupId) ? 'selected' : ''}>${g.name}</option>
                         `).join('')}
                       </select>
                       <span class="px-2 py-1 rounded text-xs font-medium ${priorityClass(t.priority)}">
@@ -769,21 +847,21 @@
 
             <div class="mt-3 pt-3 border-t ${borderColor} ${grp.collapsed ? 'hidden' : ''}">
               ${
-                ui.showNewTask === grp.id
+                String(ui.showNewTask) === String(grp.id)
                   ? `
                     <div class="space-y-2">
                       <input id="new-task-name-${grp.id}" type="text" placeholder="Task name..."
                              class="w-full p-2 text-sm border rounded dark:bg-gray-700 dark:text-gray-50"
                              autofocus
-                             onkeypress="if(event.key==='Enter') actions.submitTask(${grp.id})">
-                      <button onclick="actions.submitTask(${grp.id})"
+                             onkeypress="if(event.key==='Enter') actions.submitTask('${grp.id}')">
+                      <button onclick="actions.submitTask('${grp.id}')"
                               class="w-full bg-green-600 text-white px-3 py-1 rounded text-sm">
                         Add Task
                       </button>
                     </div>
                   `
                   : `
-                    <button onclick="actions.setShowNewTask(${grp.id})"
+                    <button onclick="actions.setShowNewTask('${grp.id}')"
                             class="w-full py-2 text-sm text-blue-500 border border-dashed border-blue-300 rounded hover:bg-blue-50 dark:hover:bg-gray-900">
                       + Add Task
                     </button>
@@ -809,7 +887,7 @@
       <div class="mb-3 rounded-xl border ${borderColor} ${darkMode ? 'bg-gray-900' : 'bg-gray-50'} p-3 text-xs">
         <div class="flex items-center justify-between mb-2">
           <span class="font-semibold text-gray-600 dark:text-gray-200">Columns for "${grp.name}"</span>
-          <button onclick="actions.addColumn(${grp.id})"
+          <button onclick="actions.addColumn('${grp.id}')"
                   class="flex items-center gap-1 text-blue-500 hover:text-blue-700">
             <i data-lucide="plus" class="w-3 h-3"></i> Add Column
           </button>
@@ -819,12 +897,12 @@
             <div class="flex items-center gap-2">
               <input id="col-name-${grp.id}-${col.id}" value="${col.name}"
                      class="flex-1 px-2 py-1 rounded border ${borderColor} bg-white dark:bg-gray-800 dark:text-gray-100"
-                     onblur="actions.renameColumn(${grp.id}, '${col.id}')"
-                     onkeypress="if(event.key==='Enter'){actions.renameColumn(${grp.id}, '${col.id}')}" />
+                     onblur="actions.renameColumn('${grp.id}', '${col.id}')"
+                     onkeypress="if(event.key==='Enter'){actions.renameColumn('${grp.id}', '${col.id}')}" />
               <span class="text-[10px] px-2 py-1 rounded-full ${col.isDefault ? 'bg-gray-200 text-gray-700' : 'bg-purple-100 text-purple-700'}">
                 ${col.isDefault ? 'Default' : 'Custom'}
               </span>
-              <button onclick="actions.deleteColumn(${grp.id}, '${col.id}')"
+              <button onclick="actions.deleteColumn('${grp.id}', '${col.id}')"
                       class="text-red-500 hover:text-red-700">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
               </button>
@@ -844,7 +922,7 @@
     const subtleText = darkMode ? 'text-gray-400' : 'text-gray-500';
     const borderColor = darkMode ? 'border-gray-700' : 'border-gray-200';
 
-    const project = projects.find(p => p.id === selectedProject);
+    const project = projects.find(p => String(p.id) === String(selectedProject));
 
     const header = `
       <div class="flex items-center justify-between mb-6">
@@ -866,11 +944,11 @@
     `;
 
     const groupBlocks = groups
-      .filter(grp => grp.projectId === selectedProject)
+      .filter(grp => String(grp.projectId) === String(selectedProject))
       .map(grp => {
-        const grpTasks = tasks.filter(t => t.groupId === grp.id);
+        const grpTasks = tasks.filter(t => String(t.groupId) === String(grp.id));
         const cols = grp.columns;
-        const isEditingGroup = ui.editingGroupId === grp.id;
+        const isEditingGroup = String(ui.editingGroupId) === String(grp.id);
 
         const headerCols = cols.map(col => `
           <div class="flex-1 text-xs font-semibold ${subtleText}">${col.name}</div>
@@ -895,7 +973,7 @@
           <div class="mb-6 rounded-2xl overflow-hidden border ${borderColor} shadow-sm ${cardBg}">
             <div class="flex items-center justify-between px-4 py-3 border-b ${borderColor}">
               <div class="flex items-center gap-2">
-                <button onclick="actions.toggleGroupCollapse(${grp.id})"
+                <button onclick="actions.toggleGroupCollapse('${grp.id}')"
                         class="${subtleText} hover:text-gray-600">
                   <i data-lucide="${grp.collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
                 </button>
@@ -904,29 +982,29 @@
                     ? `<input id="group-name-input-${grp.id}" value="${ui.editingGroupName}"
                                class="text-sm font-semibold bg-transparent outline-none border-b border-blue-300 text-${darkMode ? 'gray-100' : 'gray-900'}"
                                autofocus
-                               onblur="actions.saveGroupName(${grp.id})"
-                               onkeypress="if(event.key==='Enter'){actions.saveGroupName(${grp.id})}" />`
+                               onblur="actions.saveGroupName('${grp.id}')"
+                               onkeypress="if(event.key==='Enter'){actions.saveGroupName('${grp.id}')}" />`
                     : `<h2 class="text-sm font-semibold ${textColor}">${grp.name}</h2>`
                 }
                 <span class="bg-gray-100 dark:bg-gray-900 ${subtleText} text-xs px-2 py-1 rounded-full">${grpTasks.length}</span>
               </div>
               <div class="flex items-center gap-3 text-xs ${subtleText}">
-                <button onclick="actions.toggleColumnsPanel(${grp.id})"
+                <button onclick="actions.toggleColumnsPanel('${grp.id}')"
                         class="flex items-center gap-1 hover:text-gray-700">
                   <i data-lucide="columns-3" class="w-3 h-3"></i> Columns
                 </button>
-                <button onclick="actions.startEditGroup(${grp.id})"
+                <button onclick="actions.startEditGroup('${grp.id}')"
                         class="hover:text-gray-700 flex items-center gap-1">
                   <i data-lucide="edit-2" class="w-3 h-3"></i> Rename
                 </button>
-                <button onclick="actions.deleteGroup(${grp.id})"
+                <button onclick="actions.deleteGroup('${grp.id}')"
                         class="hover:text-red-600 text-red-500 flex items-center gap-1">
                   <i data-lucide="trash-2" class="w-3 h-3"></i> Delete
                 </button>
               </div>
             </div>
 
-            ${ui.columnsGroupId === grp.id ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
+            ${String(ui.columnsGroupId) === String(grp.id) ? renderColumnsPanel(grp, borderColor, darkMode) : ''}
 
             <div class="${grp.collapsed ? 'hidden' : 'block'}">
               <div class="overflow-x-auto">
@@ -940,21 +1018,21 @@
 
               <div class="border-t ${borderColor} px-4 py-3 bg-gray-50 dark:bg-gray-900">
                 ${
-                  ui.showNewTask === grp.id
+                  String(ui.showNewTask) === String(grp.id)
                     ? `
                       <div class="flex gap-2">
                         <input id="new-task-name-${grp.id}" type="text" placeholder="Task name..."
                                class="flex-1 px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:text-gray-50"
                                autofocus
-                               onkeypress="if(event.key==='Enter'){actions.submitTask(${grp.id})}">
-                        <button onclick="actions.submitTask(${grp.id})"
+                               onkeypress="if(event.key==='Enter'){actions.submitTask('${grp.id}')}">
+                        <button onclick="actions.submitTask('${grp.id}')"
                                 class="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
                           Add
                         </button>
                       </div>
                     `
                     : `
-                      <button onclick="actions.setShowNewTask(${grp.id})"
+                      <button onclick="actions.setShowNewTask('${grp.id}')"
                               class="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1">
                         <i data-lucide="plus" class="w-3 h-3"></i> Add Task
                       </button>
@@ -979,7 +1057,7 @@
       `class="w-full px-2 py-1 text-sm border ${borderColor} rounded bg-white dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-400"`;
 
     if (col.id === 'task') {
-      if (state.ui.editingTaskId === t.id) {
+      if (String(state.ui.editingTaskId) === String(t.id)) {
         return `
           <div class="flex-1 mr-2">
             <input id="task-name-input-${t.id}" value="${t.name}"
@@ -1097,11 +1175,13 @@
     lucide.createIcons();
   }
 
+  // Polling interval to keep data fresh (optional)
   setInterval(() => {
-    if (state.currentUser) api.fetchTasks();
-  }, 3000);
+    if (state.currentUser) api.syncAll();
+  }, 5000);
 
-  if (state.currentUser) api.fetchTasks();
+  // Initial Load
+  if (state.currentUser) api.syncAll();
   renderApp();
 </script>
 </body>
