@@ -52,7 +52,6 @@
     showLogin: !currentUser,
     isLoading: false,
     
-    // Save Status for UI feedback
     saveStatus: 'saved', 
 
     workspaces: [],
@@ -84,11 +83,10 @@
     }
   }
 
-  // ========== API (FIXED) ==========
+  // ========== API ==========
   const api = {
     saveTimer: null,
 
-    // 🔴 FIXED: Using POST to load data safely
     load: async () => {
       if (!state.currentUser) return;
       
@@ -97,38 +95,39 @@
         renderApp();
         console.log("🔄 Loading data...");
         
-        // We send the request as a POST with a JSON body
         const res = await fetch(ZOHO_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                request_method: 'GET', // Tell backend this is a GET operation
+                request_method: 'GET',
                 user_email: state.currentUser.email
             })
         });
         
         const json = await res.json();
-        console.log("✅ Database response:", json);
+        console.log("✅ Response:", json);
         
-        if (json.status === 'success') {
-           if(json.data && Object.keys(json.data).length > 0) {
-                state.workspaces = json.data.workspaces || [];
-                state.projects = json.data.projects || [];
-                state.groups = json.data.groups || [];
-                state.tasks = json.data.tasks || [];
-                
-                if(state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
-                if(state.projects.length > 0) {
-                    const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
-                    state.selectedProject = proj ? proj.id : state.projects[0].id;
-                }
-           } else {
-               console.log("📦 No data found. Initializing defaults (WITHOUT Saving)");
-               api.initDefaults();
-           }
+        // 🔴 FAIL-SAFE FIX: 
+        // If status is success AND we have data, load it.
+        // OTHERWISE, load defaults (don't show blank screen).
+        if (json.status === 'success' && json.data && Object.keys(json.data).length > 0) {
+            state.workspaces = json.data.workspaces || [];
+            state.projects = json.data.projects || [];
+            state.groups = json.data.groups || [];
+            state.tasks = json.data.tasks || [];
+            
+            if(state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
+            if(state.projects.length > 0) {
+                const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
+                state.selectedProject = proj ? proj.id : state.projects[0].id;
+            }
+        } else {
+           console.warn("⚠️ No valid data found (or backend error). Loading defaults.");
+           api.initDefaults();
         }
       } catch (e) {
         console.error("❌ Load error:", e);
+        api.initDefaults(); // Fallback on network error
       } finally {
         state.isLoading = false;
         renderApp();
@@ -151,7 +150,7 @@
       state.selectedWorkspace = wsId;
       state.selectedProject = pId;
       
-      // NO TRIGGER SAVE HERE. Safe defaults.
+      // ❌ NO AUTO-SAVE HERE
     },
 
     triggerSave: () => {
@@ -190,19 +189,16 @@
         
         const text = await res.text();
         let json;
-        try {
-            json = JSON.parse(text);
-        } catch(e) {
-            console.error("Server non-JSON:", text);
-            throw new Error("Server Error");
-        }
+        try { json = JSON.parse(text); } 
+        catch(e) { throw new Error("Server Error: " + text); }
 
-        if(json.status === 'error') {
-            console.error("Zoho Error:", json);
-            state.saveStatus = 'error';
-        } else {
+        // 🔴 STRICT CHECK: Only say "Saved" if backend explicitly says "success"
+        if(json.status === 'success') {
             console.log("✅ Saved successfully");
             state.saveStatus = 'saved';
+        } else {
+            console.error("Zoho Error:", json);
+            state.saveStatus = 'error';
         }
 
       } catch (e) {
