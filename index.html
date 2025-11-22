@@ -24,9 +24,7 @@
 
 <script>
   // ========== CONFIGURATION ==========
-  // Point this to your Vercel Proxy Route
   const ZOHO_API_URL = "/api/proxy";
-  
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
 
@@ -39,13 +37,10 @@
         currentUser = {
           id: parts[1],
           name: parts[0].split('@')[0],
-          email: parts[0],
-          role: 'owner'
+          email: parts[0]
         };
       }
-    } catch (e) {
-      console.error("Auth Failed", e);
-    }
+    } catch (e) { console.error("Auth Failed", e); }
   }
 
   const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
@@ -56,6 +51,9 @@
     currentUser,
     showLogin: !currentUser,
     isLoading: false,
+    
+    // NEW: Save Status for UI feedback
+    saveStatus: 'saved', // 'saved', 'saving', 'pending', 'error'
 
     workspaces: [],
     selectedWorkspace: null,
@@ -66,7 +64,7 @@
 
     ui: {
       showNewTask: null,
-      newTask: { name: '', assignee: null, priority: 'Medium', status: 'Not Started', dueDate: '' },
+      newTask: { name: '', priority: 'Medium' },
       editingWorkspaceId: null, 
       editingProjectId: null,
       editingTaskId: null,
@@ -86,8 +84,10 @@
     }
   }
 
-  // ========== API ==========
+  // ========== API (FIXED WITH DEBOUNCE) ==========
   const api = {
+    saveTimer: null, // Holds the timeout ID
+
     // Load Data
     load: async () => {
       if (!state.currentUser) return;
@@ -95,30 +95,24 @@
       try {
         state.isLoading = true;
         renderApp();
-        console.log("🔄 Loading data from database...");
+        console.log("🔄 Loading data...");
         
         const res = await fetch(`${ZOHO_API_URL}?request_method=GET&user_email=${encodeURIComponent(state.currentUser.email)}`);
         const json = await res.json();
         
-        console.log("✅ Database response:", json);
-
         if (json.status === 'success') {
            if(json.data && Object.keys(json.data).length > 0) {
-                // Load data into state
                 state.workspaces = json.data.workspaces || [];
                 state.projects = json.data.projects || [];
                 state.groups = json.data.groups || [];
                 state.tasks = json.data.tasks || [];
                 
-                // Set Selections
                 if(state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
                 if(state.projects.length > 0) {
                     const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
                     state.selectedProject = proj ? proj.id : state.projects[0].id;
                 }
            } else {
-               // Empty DB -> Init Defaults
-               console.log("📦 Initializing default data...");
                api.initDefaults();
            }
         }
@@ -130,7 +124,6 @@
       }
     },
 
-    // Initialize Defaults
     initDefaults: () => {
       const wsId = uid();
       const pId = uid();
@@ -144,19 +137,34 @@
         { id: g3, name: 'Done', projectId: pId, collapsed: false }
       ];
       state.tasks = [];
-      
       state.selectedWorkspace = wsId;
       state.selectedProject = pId;
-
-      api.save();
+      api.triggerSave(); // Use the trigger function
     },
 
-    // Save Data (FIXED: USES POST BODY)
-    save: async () => {
+    // 🔴 CRITICAL FIX: DEBOUNCED SAVE
+    // This prevents saving too often and hitting error 429
+    triggerSave: () => {
+      // 1. Clear existing timer
+      if (api.saveTimer) clearTimeout(api.saveTimer);
+      
+      // 2. Update UI to show we have pending changes
+      state.saveStatus = 'pending';
+      renderStatusIndicator(); // Only re-render status, not whole app
+
+      // 3. Set new timer for 2 seconds
+      api.saveTimer = setTimeout(() => {
+        api.performSave();
+      }, 2000); 
+    },
+
+    performSave: async () => {
       if (!state.currentUser) return;
 
       try {
-        // 1. Create the payload object
+        state.saveStatus = 'saving';
+        renderStatusIndicator();
+
         const payload = {
           workspaces: state.workspaces,
           projects: state.projects,
@@ -164,33 +172,43 @@
           tasks: state.tasks
         };
 
-        // 2. Stringify it
-        const payloadString = JSON.stringify(payload);
-        console.log("💾 Saving data...", { size: payloadString.length });
-
-        // 3. Send via POST Body
         const res = await fetch(ZOHO_API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 request_method: 'POST',
                 user_email: state.currentUser.email,
-                data_payload: payloadString 
+                data_payload: JSON.stringify(payload)
             })
         });
+        
+        // Handle non-JSON responses (prevent SyntaxError 'A')
+        const text = await res.text();
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch(e) {
+            throw new Error("Server returned non-JSON error: " + text.substring(0, 50));
+        }
 
-        const json = await res.json();
-        console.log("✅ Save response:", json);
+        if(json.status === 'error') {
+            console.error("Zoho Error:", json);
+            state.saveStatus = 'error';
+        } else {
+            console.log("✅ Saved successfully");
+            state.saveStatus = 'saved';
+        }
 
       } catch (e) {
         console.error("❌ Save error:", e);
+        state.saveStatus = 'error';
+      } finally {
+        renderStatusIndicator();
       }
     }
   };
 
-  // ========== ACTIONS ==========
+  // ========== ACTIONS (Updated to use triggerSave) ==========
   const actions = {
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
     
@@ -206,7 +224,7 @@
       state.workspaces.push({ id, name: 'New Workspace' });
       state.selectedWorkspace = id;
       renderApp();
-      api.save();
+      api.triggerSave();
     },
     startEditWorkspace: (id) => { state.ui.editingWorkspaceId = id; renderApp(); },
     saveWorkspaceName: (id) => {
@@ -214,7 +232,7 @@
       const ws = state.workspaces.find(w => w.id === id);
       if (ws && input) {
         ws.name = input.value.trim() || ws.name;
-        api.save();
+        api.triggerSave();
       }
       state.ui.editingWorkspaceId = null;
       renderApp();
@@ -224,17 +242,14 @@
       state.workspaces = state.workspaces.filter(w => w.id !== id);
       if(state.selectedWorkspace === id) state.selectedWorkspace = state.workspaces[0].id;
       renderApp();
-      api.save();
+      api.triggerSave();
     },
 
     // Projects
     addProject: () => {
       const id = uid();
-      state.projects.push({
-        id, name: 'New Project', color: 'bg-green-500', workspaceId: state.selectedWorkspace
-      });
+      state.projects.push({ id, name: 'New Project', color: 'bg-green-500', workspaceId: state.selectedWorkspace });
       state.selectedProject = id;
-      // Add default groups for new project
       const g1 = uid(), g2 = uid(), g3 = uid();
       state.groups.push(
           { id: g1, name: 'To Do', projectId: id },
@@ -242,7 +257,7 @@
           { id: g3, name: 'Done', projectId: id }
       );
       renderApp();
-      api.save();
+      api.triggerSave();
     },
     selectProject: (id) => { state.selectedProject = id; renderApp(); },
     startEditProject: (id) => { state.ui.editingProjectId = id; renderApp(); },
@@ -251,23 +266,18 @@
       const p = state.projects.find(pr => pr.id === id);
       if (p && input) {
         p.name = input.value.trim() || p.name;
-        api.save();
+        api.triggerSave();
       }
       state.ui.editingProjectId = null;
       renderApp();
     },
     deleteProject: (id) => {
-        if(confirm("Delete project and all tasks?")) {
+        if(confirm("Delete project?")) {
             state.projects = state.projects.filter(p => p.id !== id);
-            // cleanup groups and tasks
-            const groupIds = state.groups.filter(g => g.projectId === id).map(g => g.id);
-            state.groups = state.groups.filter(g => g.projectId !== id);
-            state.tasks = state.tasks.filter(t => !groupIds.includes(t.groupId));
-            
             const nextP = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
             state.selectedProject = nextP ? nextP.id : null;
             renderApp();
-            api.save();
+            api.triggerSave();
         }
     },
 
@@ -276,7 +286,7 @@
       const id = uid();
       state.groups.push({ id, name: 'New Group', projectId: state.selectedProject, collapsed: false });
       renderApp();
-      api.save();
+      api.triggerSave();
     },
     startEditGroup: (id) => { state.ui.editingGroupId = id; renderApp(); },
     saveGroupName: (id) => {
@@ -284,24 +294,24 @@
         const g = state.groups.find(gr => gr.id === id);
         if(g && input) {
             g.name = input.value.trim() || g.name;
-            api.save();
+            api.triggerSave();
         }
         state.ui.editingGroupId = null;
         renderApp();
     },
     deleteGroup: (id) => {
-        if(confirm("Delete group? Tasks will be deleted.")) {
+        if(confirm("Delete group?")) {
             state.groups = state.groups.filter(g => g.id !== id);
             state.tasks = state.tasks.filter(t => t.groupId !== id);
             renderApp();
-            api.save();
+            api.triggerSave();
         }
     },
     toggleGroupCollapse: (id) => {
         const g = state.groups.find(gr => gr.id === id);
         if(g) g.collapsed = !g.collapsed;
         renderApp();
-        api.save(); // Save state of collapse
+        api.triggerSave();
     },
 
     // Tasks
@@ -325,12 +335,12 @@
       });
       state.ui.showNewTask = null;
       renderApp();
-      api.save();
+      api.triggerSave();
     },
     deleteTask: (id) => {
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
-      api.save();
+      api.triggerSave();
     },
     startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(() => document.getElementById(`task-name-${id}`).focus(), 50); },
     saveTaskName: (id) => {
@@ -338,7 +348,7 @@
         const t = state.tasks.find(task => task.id === id);
         if(t && input) {
             t.name = input.value.trim() || t.name;
-            api.save();
+            api.triggerSave();
         }
         state.ui.editingTaskId = null;
         renderApp();
@@ -348,13 +358,28 @@
         if(t) {
             t.groupId = newGroupId;
             renderApp();
-            api.save();
+            api.triggerSave();
         }
     }
   };
   window.actions = actions;
 
-  // ========== RENDER ==========
+  // ========== RENDER FUNCTIONS ==========
+  
+  function renderStatusIndicator() {
+      const el = document.getElementById('save-status');
+      if(!el) return;
+
+      let html = '';
+      if(state.saveStatus === 'saving') html = '<span class="text-blue-500 flex items-center gap-1"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Saving...</span>';
+      else if(state.saveStatus === 'pending') html = '<span class="text-yellow-500 flex items-center gap-1">Changes pending...</span>';
+      else if(state.saveStatus === 'error') html = '<span class="text-red-500 flex items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i> Save Failed</span>';
+      else html = '<span class="text-green-500 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Saved</span>';
+      
+      el.innerHTML = html;
+      lucide.createIcons();
+  }
+
   function renderSidebar() {
     const { workspaces, selectedWorkspace, projects, selectedProject, ui, darkMode } = state;
     const cardBg = darkMode ? 'bg-gray-900' : 'bg-white';
@@ -367,6 +392,7 @@
           <h1 class="text-2xl font-bold ${textColor} flex items-center gap-2">
              <i data-lucide="layout" class="text-blue-500"></i> WellTask
           </h1>
+          <div id="save-status" class="text-xs mt-2 h-4"></div>
         </div>
 
         <nav class="flex-1 p-4 space-y-6 overflow-y-auto">
@@ -381,11 +407,6 @@
                   ? `<input id="ws-name-input-${w.id}" value="${w.name}" class="flex-1 bg-transparent text-sm outline-none border-b border-white" onblur="actions.saveWorkspaceName('${w.id}')" onkeypress="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" autofocus />`
                   : `<div class="flex-1 cursor-pointer truncate" onclick="actions.selectWorkspace('${w.id}')">${w.name}</div>`
                 }
-                ${w.id === selectedWorkspace ? `
-                <div class="flex gap-1">
-                    <button onclick="actions.startEditWorkspace('${w.id}')" class="opacity-70 hover:opacity-100"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
-                    <button onclick="actions.deleteWorkspace('${w.id}')" class="opacity-70 hover:opacity-100"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-                </div>` : ''}
               </div>
             `).join('')}
           </div>
@@ -411,10 +432,10 @@
             `).join('')}
           </div>
         </nav>
-
+        
         <div class="p-4 border-t ${borderColor}">
            <button onclick="actions.toggleTheme()" class="w-full flex items-center justify-between px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 ${textColor}">
-             <span class="text-sm">Switch Theme</span>
+             <span class="text-sm">Theme</span>
              <i data-lucide="${darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i>
            </button>
         </div>
@@ -438,10 +459,7 @@
     return `
       <div class="flex-1 flex flex-col h-full overflow-hidden ${pageBg}">
         <div class="px-6 py-4 border-b ${borderColor} flex justify-between items-center bg-white dark:bg-gray-900 z-10">
-            <div>
-                <h1 class="text-2xl font-bold ${textColor}">${project ? project.name : 'Project'}</h1>
-                <p class="text-xs ${subtleText}">Kanban Board</p>
-            </div>
+            <h1 class="text-2xl font-bold ${textColor}">${project ? project.name : 'Project'}</h1>
             <button onclick="actions.addGroup()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 shadow-sm transition">
                 <i data-lucide="plus" class="w-4 h-4"></i> Add Group
             </button>
@@ -477,10 +495,8 @@
                                     }
                                     <button onclick="actions.deleteTask('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
                                 </div>
-                                
                                 <div class="flex items-center justify-between mt-2 pt-2 border-t ${borderColor}">
                                     <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${priorityClass(t.priority)}">${t.priority}</span>
-                                    
                                     <select onchange="actions.moveTaskToGroup('${t.id}', this.value)" class="bg-transparent text-[10px] ${subtleText} outline-none cursor-pointer hover:text-blue-500">
                                         <option disabled selected>Move...</option>
                                         ${projectGroups.filter(g => g.id !== grp.id).map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
@@ -516,28 +532,16 @@
   }
 
   function renderLogin() {
-    return `
-      <div class="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
-        <div class="text-center bg-white dark:bg-gray-900 p-10 rounded-2xl shadow-xl border dark:border-gray-700 max-w-md w-full">
-          <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-             <i data-lucide="layout" class="w-8 h-8"></i>
-          </div>
-          <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">WellTask</h1>
-          <p class="text-gray-500 dark:text-gray-400 mb-6">Please access this application via the Zoho Cliq Widget.</p>
-        </div>
-      </div>
-    `;
+    return `<div class="h-screen flex items-center justify-center">Login via Zoho Cliq</div>`;
   }
 
   function renderApp() {
     const app = document.getElementById('app');
-
     if (state.showLogin) {
       app.innerHTML = renderLogin();
     } else {
       document.documentElement.classList.toggle('dark', state.darkMode);
       const bgColor = state.darkMode ? 'bg-gray-900' : 'bg-gray-50';
-
       app.innerHTML = `
         <div class="flex h-screen ${bgColor} overflow-hidden font-sans">
             ${state.isLoading ? `<div class="absolute inset-0 bg-black/20 z-50 flex items-center justify-center"><div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div></div>` : ''}
@@ -545,11 +549,11 @@
             ${renderKanbanView()}
         </div>
       `;
+      renderStatusIndicator();
     }
     lucide.createIcons();
   }
 
-  // ========== INIT ==========
   if (state.currentUser) {
     api.load();
   } else {
