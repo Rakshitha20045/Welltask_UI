@@ -87,53 +87,57 @@
   const api = {
     saveTimer: null,
 
+    // 1. LOAD DATA (Using POST for safety)
     load: async () => {
       if (!state.currentUser) return;
       
       try {
         state.isLoading = true;
         renderApp();
-        console.log("🔄 Loading data...");
+        console.log("🔄 Loading data via POST...");
         
+        // We use POST here to match your successful Save structure
         const res = await fetch(ZOHO_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                request_method: 'GET',
+                request_method: 'GET', 
                 user_email: state.currentUser.email
             })
         });
         
         const json = await res.json();
-        console.log("✅ Response:", json);
+        console.log("✅ DB Response:", json);
         
-        // 🔴 FAIL-SAFE FIX: 
-        // If status is success AND we have data, load it.
-        // OTHERWISE, load defaults (don't show blank screen).
-        if (json.status === 'success' && json.data && Object.keys(json.data).length > 0) {
-            state.workspaces = json.data.workspaces || [];
-            state.projects = json.data.projects || [];
-            state.groups = json.data.groups || [];
-            state.tasks = json.data.tasks || [];
-            
-            if(state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
-            if(state.projects.length > 0) {
-                const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
-                state.selectedProject = proj ? proj.id : state.projects[0].id;
-            }
+        if (json.status === 'success') {
+           if(json.data && Object.keys(json.data).length > 0) {
+                state.workspaces = json.data.workspaces || [];
+                state.projects = json.data.projects || [];
+                state.groups = json.data.groups || [];
+                state.tasks = json.data.tasks || [];
+                
+                if(state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
+                if(state.projects.length > 0) {
+                    const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
+                    state.selectedProject = proj ? proj.id : state.projects[0].id;
+                }
+           } else {
+               console.warn("📦 New user or empty DB. Initializing defaults.");
+               api.initDefaults();
+           }
         } else {
-           console.warn("⚠️ No valid data found (or backend error). Loading defaults.");
-           api.initDefaults();
+            console.error("⚠️ Backend returned error:", json);
+            // Do NOT init defaults here to avoid overwriting valid data on temporary error
         }
       } catch (e) {
         console.error("❌ Load error:", e);
-        api.initDefaults(); // Fallback on network error
       } finally {
         state.isLoading = false;
         renderApp();
       }
     },
 
+    // 2. INIT DEFAULTS (Safety: NO AUTO SAVE)
     initDefaults: () => {
       const wsId = uid();
       const pId = uid();
@@ -150,7 +154,8 @@
       state.selectedWorkspace = wsId;
       state.selectedProject = pId;
       
-      // ❌ NO AUTO-SAVE HERE
+      // ❌ NO api.triggerSave() HERE
+      // This ensures "My Workspace" doesn't overwrite "Rakshitha" if load fails for 1 second.
     },
 
     triggerSave: () => {
@@ -163,6 +168,7 @@
       }, 2000); 
     },
 
+    // 3. SAVE DATA (Matches your verified Payload)
     performSave: async () => {
       if (!state.currentUser) return;
 
@@ -177,6 +183,7 @@
           tasks: state.tasks
         };
 
+        // This generates the exact payload you confirmed works
         const res = await fetch(ZOHO_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -192,7 +199,6 @@
         try { json = JSON.parse(text); } 
         catch(e) { throw new Error("Server Error: " + text); }
 
-        // 🔴 STRICT CHECK: Only say "Saved" if backend explicitly says "success"
         if(json.status === 'success') {
             console.log("✅ Saved successfully");
             state.saveStatus = 'saved';
