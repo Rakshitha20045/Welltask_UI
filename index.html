@@ -158,82 +158,177 @@
   const api = {
     callProxy: async (payload) => {
       const proxyUrl = `/api/proxy?target_url=${encodeURIComponent(ZOHO_API_URL)}`;
+      console.log("📤 Sending to proxy:", payload);
       const res = await fetch(proxyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      return await res.json();
+      const json = await res.json();
+      console.log("📥 Received from proxy:", json);
+      return json;
     },
 
     fetchTasks: async () => {
-      if (!state.currentUser || !ZOHO_API_URL) return;
+      if (!state.currentUser || !ZOHO_API_URL) {
+        console.log("❌ No user or API URL");
+        return;
+      }
+      
+      console.log("🔄 Fetching all data...");
+      
       try {
         const json = await api.callProxy({
             request_method: 'GET',
             user_email: state.currentUser.email
         });
 
-        // ✅ DEBUG LOGGING
-        console.log("Fetch Response:", json);
+        console.log("✅ Fetch Response:", json);
 
-        // ✅ ROBUST PARSING LOGIC STARTS HERE
+        // Parse workspaces
+        if (json.workspaces && json.workspaces.length > 0) {
+          console.log("📦 Parsing workspaces:", json.workspaces.length);
+          state.workspaces = json.workspaces.map(w => ({
+            id: String(w.ROWID || w.ID),
+            name: w.name
+          }));
+          console.log("✅ Workspaces loaded:", state.workspaces);
+        } else {
+          console.log("⚠️ No workspaces found");
+        }
+
+        // Parse projects
+        if (json.projects && json.projects.length > 0) {
+          console.log("📦 Parsing projects:", json.projects.length);
+          state.projects = json.projects.map(p => {
+            let attrs = {};
+            try {
+              attrs = JSON.parse(p.attributes || '{}');
+            } catch(e) {
+              console.warn("⚠️ Failed to parse project attributes:", e);
+            }
+            
+            return {
+              id: String(p.ROWID || p.ID),
+              name: p.name,
+              color: attrs.color || 'bg-blue-500',
+              workspaceId: p.relatedid
+            };
+          });
+          console.log("✅ Projects loaded:", state.projects);
+        } else {
+          console.log("⚠️ No projects found");
+        }
+
+        // Parse groups
+        if (json.groups && json.groups.length > 0) {
+          console.log("📦 Parsing groups:", json.groups.length);
+          state.groups = json.groups.map(g => {
+            let attrs = {};
+            try {
+              attrs = JSON.parse(g.attributes || '{}');
+            } catch(e) {
+              console.warn("⚠️ Failed to parse group attributes:", e);
+            }
+            
+            let cols = [];
+            try {
+              cols = JSON.parse(attrs.columns || '[]');
+            } catch(e) {
+              console.warn("⚠️ Failed to parse group columns:", e);
+            }
+            
+            return {
+              id: String(g.ROWID || g.ID),
+              name: g.name,
+              projectId: g.relatedid,
+              collapsed: attrs.collapsed === 'true' || attrs.collapsed === true,
+              columns: cols.length > 0 ? cols : [
+                { id: 'task', name: 'Task', isDefault: true },
+                { id: 'assignee', name: 'Assignee', isDefault: true },
+                { id: 'priority', name: 'Priority', isDefault: true },
+                { id: 'status', name: 'Status', isDefault: true },
+                { id: 'duedate', name: 'Due Date', isDefault: true }
+              ]
+            };
+          });
+          console.log("✅ Groups loaded:", state.groups);
+        } else {
+          console.log("⚠️ No groups found");
+        }
+
+        // Create a map of taskid -> links
+        const linkMap = {};
+        if (json.tasklinks && json.tasklinks.length > 0) {
+          console.log("📦 Parsing task links:", json.tasklinks.length);
+          json.tasklinks.forEach(link => {
+            linkMap[link.taskid] = {
+              projectId: link.projectid,
+              groupId: link.groupid
+            };
+          });
+          console.log("✅ Task links mapped:", linkMap);
+        } else {
+          console.log("⚠️ No task links found");
+        }
+
+        // Parse tasks
         let taskArray = [];
-        
-        // Case 1: Standard Zoho Response { status: "success", data: [...] }
-        if (json.status === 'success' && Array.isArray(json.data)) {
+        if (json.status === 'success' && Array.isArray(json.tasks)) {
+            taskArray = json.tasks;
+        } else if (json.data && Array.isArray(json.data)) {
+            // Fallback if format varies
             taskArray = json.data;
-        } 
-        // Case 2: Direct Array Response [...]
-        else if (Array.isArray(json)) {
-            taskArray = json;
-        } 
-        // Case 3: Data property without explicit status
-        else if (json.data && Array.isArray(json.data)) {
-            taskArray = json.data;
-        }
-        // Case 4: Error - User IDs returned (Old Chat Bot Code Running)
-        else if (json.user_ids) {
-            console.error("CRITICAL ERROR: Webhook returned user_ids. The 'Clean' Webhook code is NOT saved correctly in Zoho.");
-            taskArray = [];
         }
 
-        console.log("Parsed Task Array:", taskArray);
+        console.log("📦 Parsing tasks:", taskArray.length);
 
         if (taskArray.length > 0) {
           state.tasks = taskArray.map(t => {
             let extras = { duedate: "", custom: {} };
             try {
               if (t.customattributes) extras = JSON.parse(t.customattributes);
-            } catch (e) {}
+            } catch (e) {
+              console.warn("⚠️ Failed to parse task customattributes:", e);
+            }
+            
+            const taskId = String(t.ROWID || t.ID || t.id);
+            const links = linkMap[taskId] || {};
             
             return {
-              id: String(t.ROWID || t.ID || t.id), 
+              id: taskId, 
               name: t.taskname,
               status: t.status || 'Not Started',
               priority: t.priority || 'Medium',
               assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
               dueDate: extras.duedate || "",
               customFields: extras.custom || {},
-              projectId: 1,
-              groupId: getGroupIdFromStatus(t.status)
+              projectId: links.projectId || state.selectedProject || 1,
+              groupId: links.groupId || getGroupIdFromStatus(t.status)
             };
           });
-          renderApp();
+          console.log("✅ Tasks loaded:", state.tasks);
         } else {
-           console.log("No tasks to display.");
+           console.log("⚠️ No tasks to display");
         }
+        
+        renderApp();
+        console.log("🎉 All data loaded successfully!");
 
       } catch (e) {
-        console.error("Sync Error", e);
+        console.error("❌ Sync Error:", e);
       }
     },
 
     createTask: async (groupId) => {
       const taskData = state.ui.newTask;
-      if (!taskData.name.trim()) return;
+      if (!taskData.name.trim()) {
+        console.log("❌ Task name is empty");
+        return;
+      }
 
-      // ✅ REMOVED Optimistic UI Update to prevent flickering
+      console.log("➕ Creating task:", taskData);
+      
       state.ui.showNewTask = null;
       renderApp(); 
 
@@ -246,23 +341,29 @@
         await api.callProxy({
             request_method: 'POST',
             action: 'create',
+            entity_type: 'task',
             user_email: state.currentUser.email,
             taskname: taskData.name,
             status: taskData.status,
             priority: taskData.priority,
             assignee: taskData.assignee ? taskData.assignee.name : 'Unassigned',
-            customattributes: packed
+            customattributes: packed,
+            projectid: String(state.selectedProject),
+            groupid: String(groupId)
         });
         
-        // ✅ Wait for fetch to complete before showing result
+        console.log("✅ Task created, fetching updated data...");
         await api.fetchTasks();
       } catch (e) {
-        console.error("Create Error", e);
+        console.error("❌ Create Task Error:", e);
       }
     },
 
     updateTask: async (task) => {
       if (!state.currentUser || !ZOHO_API_URL) return;
+      
+      console.log("✏️ Updating task:", task);
+      
       try {
         const packed = JSON.stringify({
           duedate: task.dueDate || "",
@@ -272,40 +373,119 @@
         await api.callProxy({
             request_method: 'POST',
             action: 'update',
+            entity_type: 'task',
             user_email: state.currentUser.email,
             id: task.id,
             taskname: task.name,
             status: task.status,
             priority: task.priority,
             assignee: task.assignee ? task.assignee.name : 'Unassigned',
-            customattributes: packed
+            customattributes: packed,
+            projectid: String(task.projectId),
+            groupid: String(task.groupId)
         });
+        
+        console.log("✅ Task updated");
       } catch (e) {
-        console.error("Update Error", e);
+        console.error("❌ Update Task Error:", e);
       }
     },
 
     deleteTask: async (id) => {
+      console.log("🗑️ Deleting task:", id);
+      
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
+      
       try {
         await api.callProxy({
             request_method: 'POST',
             action: 'delete',
+            entity_type: 'task',
             user_email: state.currentUser.email,
             id: id
         });
+        
+        console.log("✅ Task deleted");
       } catch (e) {
-        console.error("Delete Error", e);
+        console.error("❌ Delete Task Error:", e);
+      }
+    },
+
+    saveWorkspace: async (workspace, action) => {
+      console.log(`💾 ${action} workspace:`, workspace);
+      
+      try {
+        await api.callProxy({
+          request_method: 'POST',
+          action: action,
+          entity_type: 'workspace',
+          user_email: state.currentUser.email,
+          id: String(workspace.id),
+          name: workspace.name
+        });
+        
+        console.log("✅ Workspace saved");
+      } catch (e) {
+        console.error("❌ Workspace Save Error:", e);
+      }
+    },
+
+    saveProject: async (project, action) => {
+      console.log(`💾 ${action} project:`, project);
+      
+      try {
+        const attributes = JSON.stringify({ color: project.color });
+        await api.callProxy({
+          request_method: 'POST',
+          action: action,
+          entity_type: 'project',
+          user_email: state.currentUser.email,
+          id: String(project.id),
+          name: project.name,
+          workspaceid: String(project.workspaceId),
+          attributes: attributes
+        });
+        
+        console.log("✅ Project saved");
+      } catch (e) {
+        console.error("❌ Project Save Error:", e);
+      }
+    },
+
+    saveGroup: async (group, action) => {
+      console.log(`💾 ${action} group:`, group);
+      
+      try {
+        const attributes = JSON.stringify({
+            collapsed: group.collapsed,
+            columns: JSON.stringify(group.columns)
+        });
+
+        await api.callProxy({
+          request_method: 'POST',
+          action: action,
+          entity_type: 'group',
+          user_email: state.currentUser.email,
+          id: String(group.id),
+          name: group.name,
+          projectid: String(group.projectId),
+          attributes: attributes
+        });
+        
+        console.log("✅ Group saved");
+      } catch (e) {
+        console.error("❌ Group Save Error:", e);
       }
     }
   };
 
-  // ---------- Actions ----------
+  // ---------- Actions (UPDATED) ----------
   const actions = {
     render: () => renderApp(),
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
     setView: (view) => { state.currentView = view; renderApp(); },
+    
     // Workspaces
     selectWorkspace: (id) => {
       state.selectedWorkspace = id;
@@ -315,9 +495,11 @@
     },
     addWorkspace: () => {
       const id = uid();
-      state.workspaces.push({ id, name: 'New Workspace' });
+      const newWs = { id, name: 'New Workspace' };
+      state.workspaces.push(newWs);
       state.selectedWorkspace = id;
       renderApp();
+      api.saveWorkspace(newWs, 'create'); // Save to DB
     },
     startEditWorkspace: (id) => {
       const ws = state.workspaces.find(w => w.id === id);
@@ -332,7 +514,10 @@
       const ws = state.workspaces.find(w => w.id === id);
       if (ws) {
         const val = input.value.trim();
-        if (val) ws.name = val;
+        if (val) {
+             ws.name = val;
+             api.saveWorkspace(ws, 'update'); // Save to DB
+        }
       }
       state.ui.editingWorkspaceId = null;
       state.ui.editingWorkspaceName = '';
@@ -351,18 +536,22 @@
         if (proj) state.selectedProject = proj.id;
       }
       renderApp();
+      api.saveWorkspace({id}, 'delete'); // Save to DB
     },
+
     // Projects
     addProject: () => {
       const id = uid();
-      state.projects.push({
+      const newProj = {
         id,
         name: 'New Project',
         color: 'bg-green-500',
         workspaceId: state.selectedWorkspace
-      });
+      };
+      state.projects.push(newProj);
       state.selectedProject = id;
       renderApp();
+      api.saveProject(newProj, 'create'); // Save to DB
     },
     selectProject: (id) => { state.selectedProject = id; renderApp(); },
     startEditProject: (id) => {
@@ -378,7 +567,10 @@
       const p = state.projects.find(pr => pr.id === id);
       if (p) {
         const val = input.value.trim();
-        if (val) p.name = val;
+        if (val) {
+            p.name = val;
+            api.saveProject(p, 'update'); // Save to DB
+        }
       }
       state.ui.editingProjectId = null;
       state.ui.editingProjectName = '';
@@ -391,24 +583,31 @@
       const another = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
       state.selectedProject = another ? another.id : (state.projects[0]?.id ?? null);
       renderApp();
+      api.saveProject({id}, 'delete'); // Save to DB
     },
+
     // Groups
     toggleGroupCollapse: (id) => {
       const g = state.groups.find(gr => gr.id === id);
-      if (g) g.collapsed = !g.collapsed;
-      renderApp();
+      if (g) {
+          g.collapsed = !g.collapsed;
+          renderApp();
+          api.saveGroup(g, 'update'); // Save state
+      }
     },
     addGroup: () => {
       const baseGroup = state.groups.find(g => g.projectId === state.selectedProject) || state.groups[0];
       const id = uid();
-      state.groups.push({
+      const newGroup = {
         id,
         name: 'New Group',
         projectId: state.selectedProject,
         collapsed: false,
         columns: baseGroup ? JSON.parse(JSON.stringify(baseGroup.columns)) : []
-      });
+      };
+      state.groups.push(newGroup);
       renderApp();
+      api.saveGroup(newGroup, 'create'); // Save to DB
     },
     startEditGroup: (id) => {
       const g = state.groups.find(gr => gr.id === id);
@@ -423,7 +622,10 @@
       const g = state.groups.find(gr => gr.id === id);
       if (g) {
         const val = input.value.trim();
-        if (val) g.name = val;
+        if (val) {
+            g.name = val;
+            api.saveGroup(g, 'update'); // Save to DB
+        }
       }
       state.ui.editingGroupId = null;
       state.ui.editingGroupName = '';
@@ -433,7 +635,9 @@
       state.groups = state.groups.filter(g => g.id !== id);
       state.tasks = state.tasks.filter(t => t.groupId !== id);
       renderApp();
+      api.saveGroup({id}, 'delete'); // Save to DB
     },
+
     // Columns
     toggleColumnsPanel: (groupId) => {
       state.ui.columnsGroupId = state.ui.columnsGroupId === groupId ? null : groupId;
@@ -448,6 +652,7 @@
         isDefault: false
       });
       renderApp();
+      api.saveGroup(g, 'update'); // Save columns to DB
     },
     renameColumn: (groupId, colId) => {
       const input = document.getElementById(`col-name-${groupId}-${colId}`);
@@ -458,6 +663,7 @@
       if (col) {
         col.name = input.value.trim() || col.name;
         renderApp();
+        api.saveGroup(g, 'update'); // Save columns to DB
       }
     },
     deleteColumn: (groupId, colId) => {
@@ -470,7 +676,9 @@
         }
       });
       renderApp();
+      api.saveGroup(g, 'update'); // Save columns to DB
     },
+
     // Tasks
     setShowNewTask: (groupId) => {
       state.ui.showNewTask = groupId;
@@ -1083,8 +1291,6 @@
     lucide.createIcons();
   }
 
-  // ✅ FIX: UPDATED AUTO-REFRESH INTERVAL AS REQUESTED (5000ms)
-  // Only refresh if user is NOT currently editing a task name
   setInterval(() => {
     if (state.currentUser && !state.ui.editingTaskId) {
       api.fetchTasks();
