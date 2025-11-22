@@ -1,522 +1,571 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WellTask</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WellTask</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
 
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            gray: { 750: '#2d3748' }
-          }
-        }
-      }
-    }
-  </script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gray: { 750: '#2d3748' }
+          }
+        }
+      }
+    }
+  </script>
 
-  <style>
-    ::-webkit-scrollbar{width:8px;height:8px;}
-    ::-webkit-scrollbar-track{background:transparent;}
-    ::-webkit-scrollbar-thumb{background:#cbd5e0;border-radius:4px;}
-    .dark ::-webkit-scrollbar-thumb{background:#4a5568;}
-  </style>
+  <style>
+    ::-webkit-scrollbar{width:8px;height:8px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:#cbd5e0;border-radius:4px;}
+    .dark ::-webkit-scrollbar-thumb{background:#4a5568;}
+  </style>
 </head>
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
 <div id="app"></div>
 
 <script>
-  // 🔴 FIXED: Points to your local Vercel Proxy to solve CORS
-  const ZOHO_API_URL = "/api/proxy?";
+  // 🔴 API Configuration
+  const ZOHO_API_URL = "/api/proxy?";
 
-  // ---------- Auth ----------
-  const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get('token');
+  // ---------- Auth ----------
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get('token');
 
-  let currentUser = null;
-  if (token) {
-    try {
-      const decoded = atob(token);
-      const parts = decoded.split("::");
-      if (parts.length === 2) {
-        currentUser = {
-          id: parts[1],
-          name: parts[0].split('@')[0],
-          email: parts[0],
-          role: 'owner'
-        };
-      }
-    } catch (e) {
-      console.error("Auth Failed", e);
-    }
-  }
+  let currentUser = null;
+  if (token) {
+    try {
+      const decoded = atob(token);
+      const parts = decoded.split("::");
+      if (parts.length === 2) {
+        currentUser = {
+          id: parts[1],
+          name: parts[0].split('@')[0],
+          email: parts[0],
+          role: 'owner'
+        };
+      }
+    } catch (e) {
+      console.error("Auth Failed", e);
+    }
+  }
 
-  const uid = () => Date.now() + Math.floor(Math.random() * 1000);
+  const uid = () => Date.now() + Math.floor(Math.random() * 1000);
 
-  // ---------- State ----------
-  const initialState = {
-    darkMode: false,
-    currentView: 'list',
-    currentUser,
-    showLogin: !currentUser,
+  // ---------- State ----------
+  const initialState = {
+    darkMode: false,
+    currentView: 'list',
+    currentUser,
+    showLogin: !currentUser,
 
-    // These start empty and will be filled by the Database
-    workspaces: [],
-    selectedWorkspace: null,
+    // These start empty and will be filled by the Database
+    workspaces: [],
+    selectedWorkspace: null,
 
-    projects: [],
-    selectedProject: null,
+    projects: [],
+    selectedProject: null,
 
-    groups: [],
-    tasks: [],
+    groups: [],
+    tasks: [],
 
-    ui: {
-      showNewTask: null,
-      newTask: { name: '', assignee: null, priority: 'Medium', status: 'Not Started', dueDate: '', customFields: {} },
-      columnsGroupId: null,
-      editingWorkspaceId: null, editingWorkspaceName: '',
-      editingProjectId: null, editingProjectName: '',
-      editingTaskId: null,
-      editingGroupId: null, editingGroupName: ''
-    }
-  };
+    ui: {
+      showNewTask: null,
+      newTask: { name: '', assignee: null, priority: 'Medium', status: 'Not Started', dueDate: '', customFields: {} },
+      columnsGroupId: null,
+      editingWorkspaceId: null, editingWorkspaceName: '',
+      editingProjectId: null, editingProjectName: '',
+      editingTaskId: null,
+      editingGroupId: null, editingGroupName: ''
+    }
+  };
 
-  let state = { ...initialState };
+  let state = { ...initialState };
 
-  // ---------- Helpers ----------
-  function getGroupIdFromStatus(status) {
-    if (status === 'In Progress') return 2;
-    if (status === 'Done') return 3;
-    return 1;
-  }
+  // ---------- Helpers ----------
+  function getGroupIdFromStatus(status) {
+    if (status === 'In Progress') return 2;
+    if (status === 'Done') return 3;
+    return 1;
+  }
 
-  function priorityClass(priority) {
-    switch (priority) {
-      case 'Critical': return 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300';
-      case 'High':     return 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300';
-      case 'Medium':   return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200';
-      case 'Low':      return 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300';
-      default:         return 'bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200';
-    }
-  }
+  function priorityClass(priority) {
+    switch (priority) {
+      case 'Critical': return 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300';
+      case 'High':     return 'bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300';
+      case 'Medium':   return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200';
+      case 'Low':      return 'bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300';
+      default:         return 'bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200';
+    }
+  }
 
-  // ---------- API ----------
-  const api = {
-    // 1. SYNC ALL (Fetch Tasks AND Structure)
-    syncAll: async () => {
-      if (!state.currentUser) return;
-      try {
-        const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
-        const json = await res.json();
-        
-        if (json.status === 'success' && json.data) {
-          const serverTasks = json.data.tasks || [];
-          const serverMeta = json.data.metadata || [];
+  // ---------- API ----------
+  const api = {
+    // 1. SYNC ALL (Fetch Tasks AND Structure)
+    syncAll: async () => {
+      if (!state.currentUser) return;
+      try {
+        // 🔴 DEBUG: Log the GET request starting
+        console.log("API: Starting syncAll (GET). User:", state.currentUser.email);
+        
+        const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
+        const json = await res.json();
+        
+        // 🔴 DEBUG: Log the raw response from Deluge
+        console.log("API: syncAll response (Deluge Output):", json); 
+        
+        if (json.status === 'success' && json.data) {
+          const serverTasks = json.data.tasks || [];
+          const serverMeta = json.data.metadata || [];
 
-          // A. Rebuild Structure (Workspaces -> Projects -> Groups)
-          if(serverMeta.length > 0) {
-              const workspaces = [];
-              const projects = [];
-              const groups = [];
-              
-              serverMeta.forEach(m => {
-                  let attrs = {};
-                  try { attrs = JSON.parse(m.attributes); } catch(e){}
-                  
-                  if(m.recordtype === 'workspace') {
-                      workspaces.push({ id: String(m.id), name: m.name });
-                  } else if(m.recordtype === 'project') {
-                      projects.push({ id: String(m.id), name: m.name, workspaceId: m.relatedid, color: attrs.color || 'bg-blue-500' });
-                  } else if(m.recordtype === 'group') {
-                      groups.push({ 
-                          id: String(m.id), 
-                          name: m.name, 
-                          projectId: m.relatedid, 
-                          collapsed: attrs.collapsed || false, 
-                          columns: attrs.columns || [] 
-                      });
-                  }
-              });
-              
-              state.workspaces = workspaces;
-              state.projects = projects;
-              state.groups = groups;
-          } 
-          else {
-              // If DB is empty, initialize defaults so the UI isn't blank
-              api.initDefaults(); 
-          }
+          // A. Rebuild Structure (Workspaces -> Projects -> Groups)
+          if(serverMeta.length > 0) {
+              const workspaces = [];
+              const projects = [];
+              const groups = [];
+              
+              serverMeta.forEach(m => {
+                  let attrs = {};
+                  try { attrs = JSON.parse(m.attributes); } catch(e){}
+                  
+                  if(m.recordtype === 'workspace') {
+                      workspaces.push({ id: String(m.id), name: m.name });
+                  } else if(m.recordtype === 'project') {
+                      projects.push({ id: String(m.id), name: m.name, workspaceId: m.relatedid, color: attrs.color || 'bg-blue-500' });
+                  } else if(m.recordtype === 'group') {
+                      groups.push({ 
+                          id: String(m.id), 
+                          name: m.name, 
+                          projectId: m.relatedid, 
+                          collapsed: attrs.collapsed || false, 
+                          columns: attrs.columns || [] 
+                      });
+                  }
+              });
+              
+              state.workspaces = workspaces;
+              state.projects = projects;
+              state.groups = groups;
+          } 
+          else {
+              // If DB is empty, initialize defaults so the UI isn't blank
+              console.log("API: Database is empty. Initializing defaults.");
+              api.initDefaults(); 
+          }
 
-          // B. Rebuild Tasks
-          state.tasks = serverTasks.map(t => {
-            let extras = { duedate: "", custom: {}, groupId: null };
-            try { if (t.customattributes) extras = JSON.parse(t.customattributes); } catch (e) {}
+          // B. Rebuild Tasks
+          state.tasks = serverTasks.map(t => {
+            let extras = { duedate: "", custom: {}, groupId: null };
+            try { if (t.customattributes) extras = JSON.parse(t.customattributes); } catch (e) {}
+            
+            // Use saved Group ID or fallback to status logic
+            let gId = extras.groupId;
+            if(!gId) gId = getGroupIdFromStatus(t.status);
+
+            return {
+              id: String(t.id),
+              name: t.taskname,
+              status: t.status || 'Not Started',
+              priority: t.priority || 'Medium',
+              assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
+              dueDate: extras.duedate || "",
+              customFields: extras.custom || {},
+              projectId: state.selectedProject, 
+              groupId: gId
+            };
+          });
+
+          // Ensure a workspace/project is selected
+          if(state.workspaces.length > 0 && !state.selectedWorkspace) state.selectedWorkspace = state.workspaces[0].id;
+          if(state.projects.length > 0 && !state.selectedProject) state.selectedProject = state.projects[0].id;
+
+          renderApp();
+        }
+      } catch (e) { console.error("Sync Error", e); }
+    },
+
+    // Initialize Default Data on First Run
+    initDefaults: () => {
+        const wId = String(uid());
+        const pId = String(uid());
+        const g1 = String(uid()), g2 = String(uid()), g3 = String(uid());
+        
+        state.workspaces = [{id: wId, name: 'My Workspace'}];
+        state.projects = [{id: pId, name: 'Marketing Campaign', color: 'bg-purple-500', workspaceId: wId}];
+        state.groups = [
+            {id: g1, name: 'To Do', projectId: pId, collapsed: false, columns: []},
+            {id: g2, name: 'In Progress', projectId: pId, collapsed: false, columns: []},
+            {id: g3, name: 'Done', projectId: pId, collapsed: false, columns: []}
+        ];
+        state.selectedWorkspace = wId;
+        state.selectedProject = pId;
+        
+        // Save these defaults to DB so they persist
+        console.log("API: Sending default structure to save...");
+        api.saveMetadata('create', 'workspace', state.workspaces[0]);
+        api.saveMetadata('create', 'project', state.projects[0]);
+        state.groups.forEach(g => api.saveMetadata('create', 'group', g));
+    },
+
+    // 2. SAVE METADATA (Structure)
+    saveMetadata: async (action, type, data) => {
+         const payload = {
+             name: data.name,
+             recordtype: type,
+             relatedid: data.relatedId || data.workspaceId || data.projectId || "",
+             attributes: JSON.stringify(data.attributes || {color: data.color, collapsed: data.collapsed, columns: data.columns} || {})
+         };
+         let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${state.currentUser.email}`;
+         for (const [key, value] of Object.entries(payload)) { url += `&${key}=${encodeURIComponent(value)}`; }
+         if(data.id && action !== 'create') url += `&id=${data.id}`;
+           // 🔴 DEBUG: Log metadata POST URL before sending
+            console.log(`API: Sending Metadata ${action} URL:`, url);
+         try { 
+            const res = await fetch(url); 
+            const json = await res.json(); // Read response for success/error
+            console.log(`API: Metadata ${action} response:`, json); // Check this log for DB ID!
             
-            // Use saved Group ID or fallback to status logic
-            let gId = extras.groupId;
-            if(!gId) gId = getGroupIdFromStatus(t.status);
+            if(action === 'create' && json.status === 'success') {
+                // If this is the initial structure, sync everything immediately.
+                api.syncAll(); 
+            }
+        } catch(e) { console.error(`API: Metadata ${action} Error:`, e); }
+    },
 
-            return {
-              id: String(t.id),
-              name: t.taskname,
-              status: t.status || 'Not Started',
-              priority: t.priority || 'Medium',
-              assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
-              dueDate: extras.duedate || "",
-              customFields: extras.custom || {},
-              projectId: state.selectedProject, 
-              groupId: gId
-            };
-          });
+    // 3. TASK OPERATIONS
+    createTask: async (groupId) => {
+      const taskData = state.ui.newTask;
+      if (!taskData.name.trim()) return;
 
-          // Ensure a workspace/project is selected
-          if(state.workspaces.length > 0 && !state.selectedWorkspace) state.selectedWorkspace = state.workspaces[0].id;
-          if(state.projects.length > 0 && !state.selectedProject) state.selectedProject = state.projects[0].id;
+      // --- Client-side temporary update ---
+      const tempId = String(uid());
+      state.tasks.push({ id: tempId, groupId, projectId: state.selectedProject, ...taskData });
+      state.ui.showNewTask = null;
+      renderApp();
 
-          renderApp();
-        }
-      } catch (e) { console.error("Sync Error", e); }
-    },
-
-    // Initialize Default Data on First Run
-    initDefaults: () => {
-        const wId = String(uid());
-        const pId = String(uid());
-        const g1 = String(uid()), g2 = String(uid()), g3 = String(uid());
+      // --- Prepare data for server ---
+      const packed = JSON.stringify({ 
+          duedate: taskData.dueDate, 
+          custom: taskData.customFields,
+          groupId: groupId 
+      });
+      
+      try {
+        // 🔴 DEBUG: Construct the full URL for the POST request
+        const postUrl = 
+          `${ZOHO_API_URL}&request_method=POST&type=task&action=create` +
+          `&name=${encodeURIComponent(taskData.name)}` +
+          `&user_email=${state.currentUser.email}` +
+          `&status=${encodeURIComponent(taskData.status)}` +
+          `&priority=${encodeURIComponent(taskData.priority)}` +
+          `&assignee=${encodeURIComponent(taskData.assignee?.name || 'Unassigned')}` +
+          `&attributes=${encodeURIComponent(packed)}`;
+        
+        console.log("API: Sending Task Create URL:", postUrl); // CHECK THIS URL!
+        
+        // 🔴 CRITICAL FIX: Ensure we await the response and check for Deluge error payload
+        const response = await fetch(postUrl);
+        const json = await response.json(); // Read the JSON result from the Deluge handler
         
-        state.workspaces = [{id: wId, name: 'My Workspace'}];
-        state.projects = [{id: pId, name: 'Marketing Campaign', color: 'bg-purple-500', workspaceId: wId}];
-        state.groups = [
-            {id: g1, name: 'To Do', projectId: pId, collapsed: false, columns: []},
-            {id: g2, name: 'In Progress', projectId: pId, collapsed: false, columns: []},
-            {id: g3, name: 'Done', projectId: pId, collapsed: false, columns: []}
-        ];
-        state.selectedWorkspace = wId;
-        state.selectedProject = pId;
-        
-        // Save these defaults to DB so they persist
-        api.saveMetadata('create', 'workspace', state.workspaces[0]);
-        api.saveMetadata('create', 'project', state.projects[0]);
-        state.groups.forEach(g => api.saveMetadata('create', 'group', g));
-    },
+        console.log("API: Task Create Response (Deluge Result):", json); // CHECK THIS RESULT!
 
-    // 2. SAVE METADATA (Structure)
-    saveMetadata: async (action, type, data) => {
-         const payload = {
-             name: data.name,
-             recordtype: type,
-             relatedid: data.relatedId || "",
-             attributes: JSON.stringify(data.attributes || {})
-         };
-         let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${state.currentUser.email}`;
-         for (const [key, value] of Object.entries(payload)) { url += `&${key}=${encodeURIComponent(value)}`; }
-         if(data.id && action !== 'create') url += `&id=${data.id}`;
-         try { await fetch(url); if(action === 'create') api.syncAll(); } catch(e) { console.error(e); }
-    },
-
-    // 3. TASK OPERATIONS
-    createTask: async (groupId) => {
-      const taskData = state.ui.newTask;
-      if (!taskData.name.trim()) return;
-
-      const tempId = String(uid());
-      state.tasks.push({ id: tempId, groupId, projectId: state.selectedProject, ...taskData });
-      state.ui.showNewTask = null;
-      renderApp();
-
-      // IMPORTANT: Save groupId so it stays in the right column
-      const packed = JSON.stringify({ 
-          duedate: taskData.dueDate, 
-          custom: taskData.customFields,
-          groupId: groupId 
-      });
-      
-      try {
-        await fetch(
-          `${ZOHO_API_URL}&request_method=POST&type=task&action=create` +
-          `&name=${encodeURIComponent(taskData.name)}` +
-          `&user_email=${state.currentUser.email}` +
-          `&status=${encodeURIComponent(taskData.status)}` +
-          `&priority=${encodeURIComponent(taskData.priority)}` +
-          `&assignee=${encodeURIComponent(taskData.assignee?.name || 'Unassigned')}` +
-          `&attributes=${encodeURIComponent(packed)}`
-        );
-        api.syncAll();
-      } catch (e) { console.error(e); }
-    },
-
-    updateTask: async (task) => {
-      try {
-        const packed = JSON.stringify({ duedate: task.dueDate || "", custom: task.customFields || {}, groupId: task.groupId });
-        await fetch(
-          `${ZOHO_API_URL}&request_method=POST&type=task&action=update` +
-          `&id=${encodeURIComponent(task.id)}` +
-          `&name=${encodeURIComponent(task.name)}` +
-          `&user_email=${state.currentUser.email}` +
-          `&status=${encodeURIComponent(task.status)}` +
-          `&priority=${encodeURIComponent(task.priority)}` +
-          `&assignee=${encodeURIComponent(task.assignee?.name || 'Unassigned')}` +
-          `&attributes=${encodeURIComponent(packed)}`
-        );
-      } catch (e) { console.error(e); }
-    },
-
-    deleteTask: async (id) => {
-      state.tasks = state.tasks.filter(t => t.id !== id);
-      renderApp();
-      try { await fetch(`${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`); } catch (e) {}
-    }
-  };
-
-  // ---------- Actions (UI Interactions) ----------
-  const actions = {
-    render: () => renderApp(),
-    toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
-    setView: (view) => { state.currentView = view; renderApp(); },
-
-    // WORKSPACES
-    selectWorkspace: (id) => {
-      state.selectedWorkspace = String(id);
-      const proj = state.projects.find(p => String(p.workspaceId) === String(id));
-      if (proj) state.selectedProject = proj.id;
-      renderApp();
-    },
-    addWorkspace: () => {
-      const id = String(uid());
-      const newWS = { id, name: 'New Workspace' };
-      state.workspaces.push(newWS);
-      state.selectedWorkspace = id;
-      renderApp();
-      api.saveMetadata('create', 'workspace', newWS);
-    },
-    startEditWorkspace: (id) => {
-      const ws = state.workspaces.find(w => String(w.id) === String(id));
-      if(ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
-    },
-    saveWorkspaceName: (id) => {
-      const input = document.getElementById(`ws-name-input-${id}`);
-      const ws = state.workspaces.find(w => String(w.id) === String(id));
-      if (ws && input && input.value.trim()) {
-        ws.name = input.value.trim();
-        api.saveMetadata('update', 'workspace', ws);
-      }
-      state.ui.editingWorkspaceId = null;
-      renderApp();
-    },
-    deleteWorkspace: (id) => {
-        if(state.workspaces.length <= 1) return;
-        state.workspaces = state.workspaces.filter(w => String(w.id) !== String(id));
-        if(String(state.selectedWorkspace) === String(id)) state.selectedWorkspace = state.workspaces[0].id;
-        renderApp();
-        api.saveMetadata('delete', 'workspace', {id});
-    },
-
-    // PROJECTS
-    addProject: () => {
-      const id = String(uid());
-      const newProj = { id, name: 'New Project', color: 'bg-green-500', workspaceId: state.selectedWorkspace };
-      state.projects.push(newProj);
-      state.selectedProject = id;
-      renderApp();
-      api.saveMetadata('create', 'project', { name: newProj.name, relatedId: newProj.workspaceId, attributes: { color: newProj.color } });
-    },
-    selectProject: (id) => { state.selectedProject = String(id); renderApp(); },
-    startEditProject: (id) => { 
-        const p = state.projects.find(pr => String(pr.id) === String(id));
-        if(p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
-    },
-    saveProjectName: (id) => {
-        const input = document.getElementById(`proj-name-input-${id}`);
-        const p = state.projects.find(pr => String(pr.id) === String(id));
-        if(p && input && input.value.trim()) { p.name = input.value.trim(); api.saveMetadata('update', 'project', {id:p.id, name:p.name, relatedId:p.workspaceId, attributes:{color:p.color}}); }
-        state.ui.editingProjectId = null; renderApp();
-    },
-    deleteProject: (id) => {
-        state.projects = state.projects.filter(p => String(p.id) !== String(id));
-        renderApp();
-        api.saveMetadata('delete', 'project', {id});
-    },
-
-    // GROUPS
-    addGroup: () => {
-      const id = String(uid());
-      const newGroup = { id, name: 'New Group', projectId: state.selectedProject, collapsed: false, columns: [] };
-      state.groups.push(newGroup);
-      renderApp();
-      api.saveMetadata('create', 'group', { name: newGroup.name, relatedId: newGroup.projectId, attributes: { collapsed: false, columns: [] } });
-    },
-    startEditGroup: (id) => { 
-        const g = state.groups.find(gr => String(gr.id) === String(id));
-        if(g) { state.ui.editingGroupId = id; state.ui.editingGroupName = g.name; renderApp(); }
-    },
-    saveGroupName: (id) => {
-        const input = document.getElementById(`group-name-input-${id}`);
-        const g = state.groups.find(gr => String(gr.id) === String(id));
-        if(g && input && input.value.trim()) { g.name = input.value.trim(); api.saveMetadata('update', 'group', {id:g.id, name:g.name, relatedId:g.projectId, attributes:{collapsed:g.collapsed, columns:g.columns}}); }
-        state.ui.editingGroupId = null; renderApp();
-    },
-    toggleGroupCollapse: (id) => {
-        const g = state.groups.find(gr => String(gr.id) === String(id));
-        if(g) { g.collapsed = !g.collapsed; renderApp(); api.saveMetadata('update', 'group', {id: g.id, name: g.name, relatedId: g.projectId, attributes: {collapsed: g.collapsed, columns: g.columns}}); }
-    },
-    deleteGroup: (id) => {
-        state.groups = state.groups.filter(g => String(g.id) !== String(id));
-        renderApp();
-        api.saveMetadata('delete', 'group', {id});
-    },
-
-    // TASKS
-    setShowNewTask: (groupId) => {
-      const grp = state.groups.find(g => String(g.id) === String(groupId));
-      state.ui.showNewTask = groupId;
-      state.ui.newTask = { name: '', assignee: null, priority: 'Medium', status: grp ? grp.name : 'Not Started', dueDate: '', customFields: {} };
-      renderApp();
-    },
-    submitTask: (groupId) => {
-      const input = document.getElementById(`new-task-name-${groupId}`);
-      if (input) state.ui.newTask.name = input.value;
-      api.createTask(groupId);
-    },
-    deleteTask: (id) => api.deleteTask(id),
-    
-    startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 50); },
-    saveTaskName: (id) => {
-        const input = document.getElementById(`task-name-input-${id}`);
-        const t = state.tasks.find(task => String(task.id) === String(id));
-        if(t && input && input.value.trim()) { t.name = input.value.trim(); api.updateTask(t); }
-        state.ui.editingTaskId = null; renderApp();
-    },
-    updateTaskField: (id, field, value) => {
-        const t = state.tasks.find(task => String(task.id) === String(id));
-        if(t) {
-            if(field === 'assignee') t.assignee = value ? {name: value} : null;
-            else t[field] = value;
-            renderApp(); api.updateTask(t);
+        if (json.status !== 'success' || (json.data && !json.data.id && json.data.status !== 'success')) {
+            console.error("DELUGE ERROR: Task failed to save. Full Response:", json);
+            alert("Error saving task: Please check Cliq logs for details.");
+            return; 
         }
-    },
-    moveTaskToGroup: (id, groupId) => {
-      const t = state.tasks.find(task => String(task.id) === String(id));
-      if (!t) return;
-      t.groupId = groupId;
-      // Also update status string for safety
-      if (groupId === 1) t.status = 'Not Started';
-      if (groupId === 2) t.status = 'In Progress';
-      if (groupId === 3) t.status = 'Done';
-      renderApp();
-      api.updateTask(t);
-    }
-  };
-  window.actions = actions;
 
-  // ---------- RENDER FUNCTIONS ----------
-  function renderSidebar() {
-    const { workspaces, selectedWorkspace, projects, selectedProject, ui } = state;
-    const isEditWS = (id) => String(ui.editingWorkspaceId) === String(id);
-    const isEditProj = (id) => String(ui.editingProjectId) === String(id);
+        // ONLY run syncAll if the save was successful (and fully awaited)
+        api.syncAll();
+      } catch (e) { console.error("Network or Proxy Error:", e); }
+    },
 
-    return `
-      <div class="w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
-        <div class="p-6 border-b dark:border-gray-800"><h1 class="font-bold text-xl dark:text-white">WellTask</h1></div>
-        <div class="p-4 flex-1 overflow-y-auto">
-           <div class="mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">WORKSPACES</span><button onclick="actions.addWorkspace()" class="text-blue-500 text-xs">+ New</button></div>
-           ${workspaces.map(w => `
-             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(w.id)===String(selectedWorkspace)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectWorkspace('${w.id}')">
-               ${isEditWS(w.id) 
-                 ? `<input id="ws-name-input-${w.id}" value="${w.name}" onblur="actions.saveWorkspaceName('${w.id}')" onkeypress="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" class="bg-transparent border-b w-full" autofocus>`
-                 : `<span>${w.name}</span>`
-               }
-               <div class="flex gap-1">
-                 <button onclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
-                 <button onclick="event.stopPropagation(); actions.deleteWorkspace('${w.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
-               </div>
-             </div>
-           `).join('')}
-           
-           <div class="mt-6 mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">PROJECTS</span><button onclick="actions.addProject()" class="text-blue-500 text-xs">+ New</button></div>
-           ${projects.filter(p=>String(p.workspaceId)===String(selectedWorkspace)).map(p => `
-             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(p.id)===String(selectedProject)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectProject('${p.id}')">
-               ${isEditProj(p.id) 
-                 ? `<input id="proj-name-input-${p.id}" value="${p.name}" onblur="actions.saveProjectName('${p.id}')" onkeypress="if(event.key==='Enter') actions.saveProjectName('${p.id}')" class="bg-transparent border-b w-full" autofocus>`
-                 : `<span>${p.name}</span>`
-               }
-               <div class="flex gap-1">
-                 <button onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
-                 <button onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
-               </div>
-             </div>
-           `).join('')}
-        </div>
-        <div class="p-4 border-t dark:border-gray-800"><button onclick="actions.toggleTheme()" class="w-full flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white"><span>Theme</span><i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i></button></div>
-      </div>
-    `;
-  }
+    updateTask: async (task) => {
+      // ... (omitted for brevity)
+      try {
+        const packed = JSON.stringify({ duedate: task.dueDate || "", custom: task.customFields || {}, groupId: task.groupId });
+        const updateUrl = 
+          `${ZOHO_API_URL}&request_method=POST&type=task&action=update` +
+          `&id=${encodeURIComponent(task.id)}` +
+          `&name=${encodeURIComponent(task.name)}` +
+          `&user_email=${state.currentUser.email}` +
+          `&status=${encodeURIComponent(task.status)}` +
+          `&priority=${encodeURIComponent(task.priority)}` +
+          `&assignee=${encodeURIComponent(task.assignee?.name || 'Unassigned')}` +
+          `&attributes=${encodeURIComponent(packed)}`;
 
-  function renderKanbanView() {
-    const { groups, tasks, selectedProject, ui } = state;
-    const projectGroups = groups.filter(g => String(g.projectId) === String(selectedProject));
-    
-    return `
-      <div class="flex h-full p-6 space-x-4 overflow-x-auto bg-gray-50 dark:bg-gray-900">
-        ${projectGroups.map(grp => {
-            const grpTasks = tasks.filter(t => String(t.groupId) === String(grp.id));
-            const isEditGrp = String(ui.editingGroupId) === String(grp.id);
-            return `
-            <div class="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-full">
-               <div class="p-3 border-b dark:border-gray-700 flex justify-between items-center font-semibold dark:text-white">
-                 <div class="flex items-center gap-2">
-                   ${isEditGrp
-                     ? `<input id="group-name-input-${grp.id}" value="${grp.name}" onblur="actions.saveGroupName('${grp.id}')" onkeypress="if(event.key==='Enter') actions.saveGroupName('${grp.id}')" class="bg-transparent border-b w-32" autofocus>`
-                     : `<span>${grp.name}</span>`
-                   }
-                   <span class="text-xs text-gray-400">(${grpTasks.length})</span>
-                 </div>
-                 <div class="flex gap-1 text-gray-400">
-                    <button onclick="actions.startEditGroup('${grp.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
-                    <button onclick="actions.deleteGroup('${grp.id}')"><i data-lucide="trash-2" class="w-3 h-3 hover:text-red-500"></i></button>
-                 </div>
-               </div>
-               
-               <div class="flex-1 overflow-y-auto p-3 space-y-2">
-                 ${grpTasks.map(t => `
-                   <div class="p-3 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow-sm hover:shadow-md">
-                     ${String(ui.editingTaskId)===String(t.id) 
-                       ? `<input id="task-name-input-${t.id}" value="${t.name}" onblur="actions.saveTaskName('${t.id}')" onkeypress="if(event.key==='Enter') actions.saveTaskName('${t.id}')" class="w-full bg-transparent border-b" autofocus>` 
-                       : `<div class="font-medium dark:text-white cursor-pointer" onclick="actions.startEditTaskName('${t.id}')">${t.name}</div>`}
-                     <div class="mt-2 flex justify-between items-center text-xs text-gray-500">
-                        <select onchange="actions.moveTaskToGroup('${t.id}', '${grp.id}')" class="bg-transparent"><option>${t.priority}</option></select>
-                        <button onclick="actions.deleteTask('${t.id}')" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
-                     </div>
-                   </div>
-                 `).join('')}
-               </div>
+        console.log("API: Sending Task Update URL:", updateUrl);
+        const response = await fetch(updateUrl);
+        const json = await response.json();
+        console.log("API: Task Update Response:", json);
 
-               <div class="p-3 border-t dark:border-gray-700">
-                 ${String(ui.showNewTask)===String(grp.id) 
-                   ? `<div class="space-y-2"><input id="new-task-name-${grp.id}" class="w-full border p-1 rounded text-sm dark:bg-gray-700 dark:text-white" placeholder="Name..." autofocus onkeypress="if(event.key==='Enter') actions.submitTask('${grp.id}')"><button onclick="actions.submitTask('${grp.id}')" class="w-full bg-green-500 text-white text-sm rounded py-1">Add</button></div>`
-                   : `<button onclick="actions.setShowNewTask('${grp.id}')" class="w-full text-blue-500 text-sm py-1 border border-dashed border-blue-300 rounded hover:bg-blue-50">+ Add Task</button>`}
-               </div>
-            </div>`;
-        }).join('')}
-        <button onclick="actions.addGroup()" class="w-80 h-12 flex-shrink-0 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-400 hover:text-blue-500 gap-2"><i data-lucide="plus"></i> Add Group</button>
-      </div>
-    `;
-  }
+      } catch (e) { console.error(e); }
+    },
 
-  function renderApp() {
-    const app = document.getElementById('app');
-    if (state.showLogin) { app.innerHTML = `<div class="h-screen flex items-center justify-center text-gray-500">Access via Zoho Cliq</div>`; return; }
-    document.documentElement.classList.toggle('dark', state.darkMode);
-    app.innerHTML = `<div class="flex h-screen overflow-hidden">${renderSidebar()}<div class="flex-1 overflow-hidden">${renderKanbanView()}</div></div>`;
-    lucide.createIcons();
-  }
+    deleteTask: async (id) => {
+      state.tasks = state.tasks.filter(t => t.id !== id);
+      renderApp();
+      try { 
+        const deleteUrl = `${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`;
+        console.log("API: Sending Task Delete URL:", deleteUrl);
+        const response = await fetch(deleteUrl);
+        const json = await response.json();
+        console.log("API: Task Delete Response:", json);
+        
+    } catch (e) {}
+    }
+  };
 
-  if (state.currentUser) api.syncAll();
-  renderApp();
+  // ---------- Actions (UI Interactions) ----------
+  const actions = {
+    render: () => renderApp(),
+    toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
+    setView: (view) => { state.currentView = view; renderApp(); },
+
+    // WORKSPACES
+    selectWorkspace: (id) => {
+      state.selectedWorkspace = String(id);
+      const proj = state.projects.find(p => String(p.workspaceId) === String(id));
+      if (proj) state.selectedProject = proj.id;
+      renderApp();
+    },
+    addWorkspace: () => {
+      const id = String(uid());
+      const newWS = { id, name: 'New Workspace' };
+      state.workspaces.push(newWS);
+      state.selectedWorkspace = id;
+      renderApp();
+      api.saveMetadata('create', 'workspace', newWS);
+    },
+    startEditWorkspace: (id) => {
+      const ws = state.workspaces.find(w => String(w.id) === String(id));
+      if(ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
+    },
+    saveWorkspaceName: (id) => {
+      const input = document.getElementById(`ws-name-input-${id}`);
+      const ws = state.workspaces.find(w => String(w.id) === String(id));
+      if (ws && input && input.value.trim()) {
+        ws.name = input.value.trim();
+        api.saveMetadata('update', 'workspace', ws);
+      }
+      state.ui.editingWorkspaceId = null;
+      renderApp();
+    },
+    deleteWorkspace: (id) => {
+        if(state.workspaces.length <= 1) return;
+        state.workspaces = state.workspaces.filter(w => String(w.id) !== String(id));
+        if(String(state.selectedWorkspace) === String(id)) state.selectedWorkspace = state.workspaces[0].id;
+        renderApp();
+        api.saveMetadata('delete', 'workspace', {id});
+    },
+
+    // PROJECTS
+    addProject: () => {
+      const id = String(uid());
+      const newProj = { id, name: 'New Project', color: 'bg-green-500', workspaceId: state.selectedWorkspace };
+      state.projects.push(newProj);
+      state.selectedProject = id;
+      renderApp();
+      api.saveMetadata('create', 'project', { name: newProj.name, relatedId: newProj.workspaceId, attributes: { color: newProj.color } });
+    },
+    selectProject: (id) => { state.selectedProject = String(id); renderApp(); },
+    startEditProject: (id) => { 
+        const p = state.projects.find(pr => String(pr.id) === String(id));
+        if(p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
+    },
+    saveProjectName: (id) => {
+        const input = document.getElementById(`proj-name-input-${id}`);
+        const p = state.projects.find(pr => String(pr.id) === String(id));
+        if(p && input && input.value.trim()) { p.name = input.value.trim(); api.saveMetadata('update', 'project', {id:p.id, name:p.name, relatedId:p.workspaceId, attributes:{color:p.color}}); }
+        state.ui.editingProjectId = null; renderApp();
+    },
+    deleteProject: (id) => {
+        state.projects = state.projects.filter(p => String(p.id) !== String(id));
+        renderApp();
+        api.saveMetadata('delete', 'project', {id});
+    },
+
+    // GROUPS
+    addGroup: () => {
+      const id = String(uid());
+      const newGroup = { id, name: 'New Group', projectId: state.selectedProject, collapsed: false, columns: [] };
+      state.groups.push(newGroup);
+      renderApp();
+      api.saveMetadata('create', 'group', { name: newGroup.name, relatedId: newGroup.projectId, attributes: { collapsed: false, columns: [] } });
+    },
+    startEditGroup: (id) => { 
+        const g = state.groups.find(gr => String(gr.id) === String(id));
+        if(g) { state.ui.editingGroupId = id; state.ui.editingGroupName = g.name; renderApp(); }
+    },
+    saveGroupName: (id) => {
+        const input = document.getElementById(`group-name-input-${id}`);
+        const g = state.groups.find(gr => String(gr.id) === String(id));
+        if(g && input && input.value.trim()) { g.name = input.value.trim(); api.saveMetadata('update', 'group', {id:g.id, name:g.name, relatedId:g.projectId, attributes:{collapsed:g.collapsed, columns:g.columns}}); }
+        state.ui.editingGroupId = null; renderApp();
+    },
+    toggleGroupCollapse: (id) => {
+        const g = state.groups.find(gr => String(gr.id) === String(id));
+        if(g) { g.collapsed = !g.collapsed; renderApp(); api.saveMetadata('update', 'group', {id: g.id, name: g.name, relatedId: g.projectId, attributes: {collapsed: g.collapsed, columns: g.columns}}); }
+    },
+    deleteGroup: (id) => {
+        state.groups = state.groups.filter(g => String(g.id) !== String(id));
+        renderApp();
+        api.saveMetadata('delete', 'group', {id});
+    },
+
+    // TASKS
+    setShowNewTask: (groupId) => {
+      const grp = state.groups.find(g => String(g.id) === String(groupId));
+      state.ui.showNewTask = groupId;
+      state.ui.newTask = { name: '', assignee: null, priority: 'Medium', status: grp ? grp.name : 'Not Started', dueDate: '', customFields: {} };
+      renderApp();
+    },
+    submitTask: (groupId) => {
+      const input = document.getElementById(`new-task-name-${groupId}`);
+      if (input) state.ui.newTask.name = input.value;
+      api.createTask(groupId);
+    },
+    deleteTask: (id) => api.deleteTask(id),
+    
+    startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 50); },
+    saveTaskName: (id) => {
+        const input = document.getElementById(`task-name-input-${id}`);
+        const t = state.tasks.find(task => String(task.id) === String(id));
+        if(t && input && input.value.trim()) { t.name = input.value.trim(); api.updateTask(t); }
+        state.ui.editingTaskId = null; renderApp();
+    },
+    updateTaskField: (id, field, value) => {
+        const t = state.tasks.find(task => String(task.id) === String(id));
+        if(t) {
+            if(field === 'assignee') t.assignee = value ? {name: value} : null;
+            else t[field] = value;
+            renderApp(); api.updateTask(t);
+        }
+    },
+    moveTaskToGroup: (id, groupId) => {
+      const t = state.tasks.find(task => String(task.id) === String(id));
+      if (!t) return;
+      t.groupId = groupId;
+      // Also update status string for safety
+      if (groupId === 1) t.status = 'Not Started';
+      if (groupId === 2) t.status = 'In Progress';
+      if (groupId === 3) t.status = 'Done';
+      renderApp();
+      api.updateTask(t);
+    }
+  };
+  window.actions = actions;
+
+  // ---------- RENDER FUNCTIONS ----------
+  function renderSidebar() {
+    const { workspaces, selectedWorkspace, projects, selectedProject, ui } = state;
+    const isEditWS = (id) => String(ui.editingWorkspaceId) === String(id);
+    const isEditProj = (id) => String(ui.editingProjectId) === String(id);
+
+    return `
+      <div class="w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
+        <div class="p-6 border-b dark:border-gray-800"><h1 class="font-bold text-xl dark:text-white">WellTask</h1></div>
+        <div class="p-4 flex-1 overflow-y-auto">
+           <div class="mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">WORKSPACES</span><button onclick="actions.addWorkspace()" class="text-blue-500 text-xs">+ New</button></div>
+           ${workspaces.map(w => `
+             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(w.id)===String(selectedWorkspace)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectWorkspace('${w.id}')">
+               ${isEditWS(w.id) 
+                 ? `<input id="ws-name-input-${w.id}" value="${w.name}" onblur="actions.saveWorkspaceName('${w.id}')" onkeypress="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" class="bg-transparent border-b w-full" autofocus>`
+                 : `<span>${w.name}</span>`
+               }
+               <div class="flex gap-1">
+                 <button onclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                 <button onclick="event.stopPropagation(); actions.deleteWorkspace('${w.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
+               </div>
+             </div>
+           `).join('')}
+           
+           <div class="mt-6 mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">PROJECTS</span><button onclick="actions.addProject()" class="text-blue-500 text-xs">+ New</button></div>
+           ${projects.filter(p=>String(p.workspaceId)===String(selectedWorkspace)).map(p => `
+             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(p.id)===String(selectedProject)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectProject('${p.id}')">
+               ${isEditProj(p.id) 
+                 ? `<input id="proj-name-input-${p.id}" value="${p.name}" onblur="actions.saveProjectName('${p.id}')" onkeypress="if(event.key==='Enter') actions.saveProjectName('${p.id}')" class="bg-transparent border-b w-full" autofocus>`
+                 : `<span>${p.name}</span>`
+               }
+               <div class="flex gap-1">
+                 <button onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                 <button onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
+               </div>
+             </div>
+           `).join('')}
+        </div>
+        <div class="p-4 border-t dark:border-gray-800"><button onclick="actions.toggleTheme()" class="w-full flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white"><span>Theme</span><i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i></button></div>
+      </div>
+    `;
+  }
+
+  function renderKanbanView() {
+    const { groups, tasks, selectedProject, ui } = state;
+    const projectGroups = groups.filter(g => String(g.projectId) === String(selectedProject));
+    
+    return `
+      <div class="flex h-full p-6 space-x-4 overflow-x-auto bg-gray-50 dark:bg-gray-900">
+        ${projectGroups.map(grp => {
+            const grpTasks = tasks.filter(t => String(t.groupId) === String(grp.id));
+            const isEditGrp = String(ui.editingGroupId) === String(grp.id);
+            return `
+            <div class="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-full">
+               <div class="p-3 border-b dark:border-gray-700 flex justify-between items-center font-semibold dark:text-white">
+                 <div class="flex items-center gap-2">
+                   ${isEditGrp
+                     ? `<input id="group-name-input-${grp.id}" value="${grp.name}" onblur="actions.saveGroupName('${grp.id}')" onkeypress="if(event.key==='Enter') actions.saveGroupName('${grp.id}')" class="bg-transparent border-b w-32" autofocus>`
+                     : `<span>${grp.name}</span>`
+                   }
+                   <span class="text-xs text-gray-400">(${grpTasks.length})</span>
+                 </div>
+                 <div class="flex gap-1 text-gray-400">
+                    <button onclick="actions.startEditGroup('${grp.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                    <button onclick="actions.deleteGroup('${grp.id}')"><i data-lucide="trash-2" class="w-3 h-3 hover:text-red-500"></i></button>
+                 </div>
+               </div>
+               
+               <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                 ${grpTasks.map(t => `
+                   <div class="p-3 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow-sm hover:shadow-md">
+                     ${String(ui.editingTaskId)===String(t.id) 
+                       ? `<input id="task-name-input-${t.id}" value="${t.name}" onblur="actions.saveTaskName('${t.id}')" onkeypress="if(event.key==='Enter') actions.saveTaskName('${t.id}')" class="w-full bg-transparent border-b" autofocus>` 
+                       : `<div class="font-medium dark:text-white cursor-pointer" onclick="actions.startEditTaskName('${t.id}')">${t.name}</div>`}
+                     <div class="mt-2 flex justify-between items-center text-xs text-gray-500">
+                        <select onchange="actions.moveTaskToGroup('${t.id}', '${grp.id}')" class="bg-transparent"><option>${t.priority}</option></select>
+                        <button onclick="actions.deleteTask('${t.id}')" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+                     </div>
+                   </div>
+                 `).join('')}
+               </div>
+
+               <div class="p-3 border-t dark:border-gray-700">
+                 ${String(ui.showNewTask)===String(grp.id) 
+                   ? `<div class="space-y-2"><input id="new-task-name-${grp.id}" class="w-full border p-1 rounded text-sm dark:bg-gray-700 dark:text-white" placeholder="Name..." autofocus onkeypress="if(event.key==='Enter') actions.submitTask('${grp.id}')"><button onclick="actions.submitTask('${grp.id}')" class="w-full bg-green-500 text-white text-sm rounded py-1">Add</button></div>`
+                   : `<button onclick="actions.setShowNewTask('${grp.id}')" class="w-full text-blue-500 text-sm py-1 border border-dashed border-blue-300 rounded hover:bg-blue-50">+ Add Task</button>`}
+               </div>
+            </div>`;
+        }).join('')}
+        <button onclick="actions.addGroup()" class="w-80 h-12 flex-shrink-0 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-400 hover:text-blue-500 gap-2"><i data-lucide="plus"></i> Add Group</button>
+      </div>
+    `;
+  }
+
+  function renderApp() {
+    const app = document.getElementById('app');
+    if (state.showLogin) { app.innerHTML = `<div class="h-screen flex items-center justify-center text-gray-500">Access via Zoho Cliq</div>`; return; }
+    document.documentElement.classList.toggle('dark', state.darkMode);
+    app.innerHTML = `<div class="flex h-screen overflow-hidden">${renderSidebar()}<div class="flex-1 overflow-hidden">${renderKanbanView()}</div></div>`;
+    lucide.createIcons();
+  }
+
+  if (state.currentUser) api.syncAll();
+  renderApp();
 </script>
 </body>
 </html>
