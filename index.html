@@ -31,7 +31,7 @@
 <div id="app"></div>
 
 <script>
-  // 🔴 IMPORTANT: Point to your local Vercel Proxy
+  // 🔴 FIXED: Points to your local Vercel Proxy to solve CORS
   const ZOHO_API_URL = "/api/proxy?";
 
   // ---------- Auth ----------
@@ -65,16 +65,14 @@
     currentUser,
     showLogin: !currentUser,
 
-    // Default structure (will be overwritten by Database data)
-    workspaces: [ { id: 1, name: 'My Workspace' } ],
-    selectedWorkspace: 1,
-    projects: [ { id: 1, name: 'Marketing Campaign', color: 'bg-purple-500', workspaceId: 1 } ],
-    selectedProject: 1,
-    groups: [
-      { id: 1, name: 'To Do', projectId: 1, collapsed: false, columns: [] },
-      { id: 2, name: 'In Progress', projectId: 1, collapsed: false, columns: [] },
-      { id: 3, name: 'Done', projectId: 1, collapsed: false, columns: [] }
-    ],
+    // These start empty and will be filled by the Database
+    workspaces: [],
+    selectedWorkspace: null,
+
+    projects: [],
+    selectedProject: null,
+
+    groups: [],
     tasks: [],
 
     ui: {
@@ -109,7 +107,7 @@
 
   // ---------- API ----------
   const api = {
-    // 1. SYNC ALL (Fetch Tasks + Metadata)
+    // 1. SYNC ALL (Fetch Tasks AND Structure)
     syncAll: async () => {
       if (!state.currentUser) return;
       try {
@@ -120,7 +118,7 @@
           const serverTasks = json.data.tasks || [];
           const serverMeta = json.data.metadata || [];
 
-          // A. Process Metadata (Rebuild Structure)
+          // A. Rebuild Structure (Workspaces -> Projects -> Groups)
           if(serverMeta.length > 0) {
               const workspaces = [];
               const projects = [];
@@ -139,33 +137,29 @@
                           id: String(m.id), 
                           name: m.name, 
                           projectId: m.relatedid, 
-                          collapsed: attrs.collapsed || false,
+                          collapsed: attrs.collapsed || false, 
                           columns: attrs.columns || [] 
                       });
                   }
               });
               
-              if(workspaces.length) state.workspaces = workspaces;
-              if(projects.length) state.projects = projects;
-              if(groups.length) state.groups = groups;
-              
-              // Reset selection logic
-              if(!state.workspaces.find(w => String(w.id) === String(state.selectedWorkspace))) state.selectedWorkspace = state.workspaces[0]?.id;
-              if(!state.projects.find(p => String(p.id) === String(state.selectedProject))) state.selectedProject = state.projects[0]?.id;
+              state.workspaces = workspaces;
+              state.projects = projects;
+              state.groups = groups;
+          } 
+          else {
+              // If DB is empty, initialize defaults so the UI isn't blank
+              api.initDefaults(); 
           }
 
-          // B. Process Tasks
+          // B. Rebuild Tasks
           state.tasks = serverTasks.map(t => {
-            let extras = { duedate: "", custom: {} };
+            let extras = { duedate: "", custom: {}, groupId: null };
             try { if (t.customattributes) extras = JSON.parse(t.customattributes); } catch (e) {}
             
-            // Map Status to Group ID logic
-            let gId = getGroupIdFromStatus(t.status);
-            // If we have custom groups loaded from DB, try to match status to group name
-            if(state.groups.length > 0) {
-                const matchingGroup = state.groups.find(g => g.name === t.status && String(g.projectId) === String(state.selectedProject));
-                if(matchingGroup) gId = matchingGroup.id;
-            }
+            // Use saved Group ID or fallback to status logic
+            let gId = extras.groupId;
+            if(!gId) gId = getGroupIdFromStatus(t.status);
 
             return {
               id: String(t.id),
@@ -180,11 +174,35 @@
             };
           });
 
+          // Ensure a workspace/project is selected
+          if(state.workspaces.length > 0 && !state.selectedWorkspace) state.selectedWorkspace = state.workspaces[0].id;
+          if(state.projects.length > 0 && !state.selectedProject) state.selectedProject = state.projects[0].id;
+
           renderApp();
         }
-      } catch (e) {
-        console.error("Sync Error", e);
-      }
+      } catch (e) { console.error("Sync Error", e); }
+    },
+
+    // Initialize Default Data on First Run
+    initDefaults: () => {
+        const wId = String(uid());
+        const pId = String(uid());
+        const g1 = String(uid()), g2 = String(uid()), g3 = String(uid());
+        
+        state.workspaces = [{id: wId, name: 'My Workspace'}];
+        state.projects = [{id: pId, name: 'Marketing Campaign', color: 'bg-purple-500', workspaceId: wId}];
+        state.groups = [
+            {id: g1, name: 'To Do', projectId: pId, collapsed: false, columns: []},
+            {id: g2, name: 'In Progress', projectId: pId, collapsed: false, columns: []},
+            {id: g3, name: 'Done', projectId: pId, collapsed: false, columns: []}
+        ];
+        state.selectedWorkspace = wId;
+        state.selectedProject = pId;
+        
+        // Save these defaults to DB so they persist
+        api.saveMetadata('create', 'workspace', state.workspaces[0]);
+        api.saveMetadata('create', 'project', state.projects[0]);
+        state.groups.forEach(g => api.saveMetadata('create', 'group', g));
     },
 
     // 2. SAVE METADATA (Structure)
@@ -195,17 +213,10 @@
              relatedid: data.relatedId || "",
              attributes: JSON.stringify(data.attributes || {})
          };
-         
          let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${state.currentUser.email}`;
-         for (const [key, value] of Object.entries(payload)) {
-             url += `&${key}=${encodeURIComponent(value)}`;
-         }
+         for (const [key, value] of Object.entries(payload)) { url += `&${key}=${encodeURIComponent(value)}`; }
          if(data.id && action !== 'create') url += `&id=${data.id}`;
-
-         try {
-             await fetch(url);
-             if(action === 'create') api.syncAll(); 
-         } catch(e) { console.error(e); }
+         try { await fetch(url); if(action === 'create') api.syncAll(); } catch(e) { console.error(e); }
     },
 
     // 3. TASK OPERATIONS
@@ -213,12 +224,17 @@
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
-      // Optimistic
-      state.tasks.push({ id: String(uid()), groupId, projectId: state.selectedProject, ...taskData });
+      const tempId = String(uid());
+      state.tasks.push({ id: tempId, groupId, projectId: state.selectedProject, ...taskData });
       state.ui.showNewTask = null;
       renderApp();
 
-      const packed = JSON.stringify({ duedate: taskData.dueDate, custom: taskData.customFields });
+      // IMPORTANT: Save groupId so it stays in the right column
+      const packed = JSON.stringify({ 
+          duedate: taskData.dueDate, 
+          custom: taskData.customFields,
+          groupId: groupId 
+      });
       
       try {
         await fetch(
@@ -236,7 +252,7 @@
 
     updateTask: async (task) => {
       try {
-        const packed = JSON.stringify({ duedate: task.dueDate || "", custom: task.customFields || {} });
+        const packed = JSON.stringify({ duedate: task.dueDate || "", custom: task.customFields || {}, groupId: task.groupId });
         await fetch(
           `${ZOHO_API_URL}&request_method=POST&type=task&action=update` +
           `&id=${encodeURIComponent(task.id)}` +
@@ -253,19 +269,17 @@
     deleteTask: async (id) => {
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
-      try {
-        await fetch(`${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`);
-      } catch (e) { console.error(e); }
+      try { await fetch(`${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`); } catch (e) {}
     }
   };
 
-  // ---------- Actions (UI Logic) ----------
+  // ---------- Actions (UI Interactions) ----------
   const actions = {
     render: () => renderApp(),
     toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); },
     setView: (view) => { state.currentView = view; renderApp(); },
 
-    // Workspaces
+    // WORKSPACES
     selectWorkspace: (id) => {
       state.selectedWorkspace = String(id);
       const proj = state.projects.find(p => String(p.workspaceId) === String(id));
@@ -282,7 +296,7 @@
     },
     startEditWorkspace: (id) => {
       const ws = state.workspaces.find(w => String(w.id) === String(id));
-      if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
+      if(ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
     },
     saveWorkspaceName: (id) => {
       const input = document.getElementById(`ws-name-input-${id}`);
@@ -302,7 +316,7 @@
         api.saveMetadata('delete', 'workspace', {id});
     },
 
-    // Projects
+    // PROJECTS
     addProject: () => {
       const id = String(uid());
       const newProj = { id, name: 'New Project', color: 'bg-green-500', workspaceId: state.selectedWorkspace };
@@ -312,13 +326,23 @@
       api.saveMetadata('create', 'project', { name: newProj.name, relatedId: newProj.workspaceId, attributes: { color: newProj.color } });
     },
     selectProject: (id) => { state.selectedProject = String(id); renderApp(); },
+    startEditProject: (id) => { 
+        const p = state.projects.find(pr => String(pr.id) === String(id));
+        if(p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
+    },
+    saveProjectName: (id) => {
+        const input = document.getElementById(`proj-name-input-${id}`);
+        const p = state.projects.find(pr => String(pr.id) === String(id));
+        if(p && input && input.value.trim()) { p.name = input.value.trim(); api.saveMetadata('update', 'project', {id:p.id, name:p.name, relatedId:p.workspaceId, attributes:{color:p.color}}); }
+        state.ui.editingProjectId = null; renderApp();
+    },
     deleteProject: (id) => {
         state.projects = state.projects.filter(p => String(p.id) !== String(id));
         renderApp();
         api.saveMetadata('delete', 'project', {id});
     },
 
-    // Groups
+    // GROUPS
     addGroup: () => {
       const id = String(uid());
       const newGroup = { id, name: 'New Group', projectId: state.selectedProject, collapsed: false, columns: [] };
@@ -326,12 +350,27 @@
       renderApp();
       api.saveMetadata('create', 'group', { name: newGroup.name, relatedId: newGroup.projectId, attributes: { collapsed: false, columns: [] } });
     },
+    startEditGroup: (id) => { 
+        const g = state.groups.find(gr => String(gr.id) === String(id));
+        if(g) { state.ui.editingGroupId = id; state.ui.editingGroupName = g.name; renderApp(); }
+    },
+    saveGroupName: (id) => {
+        const input = document.getElementById(`group-name-input-${id}`);
+        const g = state.groups.find(gr => String(gr.id) === String(id));
+        if(g && input && input.value.trim()) { g.name = input.value.trim(); api.saveMetadata('update', 'group', {id:g.id, name:g.name, relatedId:g.projectId, attributes:{collapsed:g.collapsed, columns:g.columns}}); }
+        state.ui.editingGroupId = null; renderApp();
+    },
     toggleGroupCollapse: (id) => {
         const g = state.groups.find(gr => String(gr.id) === String(id));
         if(g) { g.collapsed = !g.collapsed; renderApp(); api.saveMetadata('update', 'group', {id: g.id, name: g.name, relatedId: g.projectId, attributes: {collapsed: g.collapsed, columns: g.columns}}); }
     },
+    deleteGroup: (id) => {
+        state.groups = state.groups.filter(g => String(g.id) !== String(id));
+        renderApp();
+        api.saveMetadata('delete', 'group', {id});
+    },
 
-    // Tasks
+    // TASKS
     setShowNewTask: (groupId) => {
       const grp = state.groups.find(g => String(g.id) === String(groupId));
       state.ui.showNewTask = groupId;
@@ -345,7 +384,6 @@
     },
     deleteTask: (id) => api.deleteTask(id),
     
-    // UI Helpers (Task Rename)
     startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 50); },
     saveTaskName: (id) => {
         const input = document.getElementById(`task-name-input-${id}`);
@@ -360,60 +398,111 @@
             else t[field] = value;
             renderApp(); api.updateTask(t);
         }
+    },
+    moveTaskToGroup: (id, groupId) => {
+      const t = state.tasks.find(task => String(task.id) === String(id));
+      if (!t) return;
+      t.groupId = groupId;
+      // Also update status string for safety
+      if (groupId === 1) t.status = 'Not Started';
+      if (groupId === 2) t.status = 'In Progress';
+      if (groupId === 3) t.status = 'Done';
+      renderApp();
+      api.updateTask(t);
     }
   };
   window.actions = actions;
 
-  // ---------- Sidebar & Render Functions ----------
-  // (Simplified for brevity - Assuming standard render logic here as per previous versions)
+  // ---------- RENDER FUNCTIONS ----------
   function renderSidebar() {
-    const { workspaces, selectedWorkspace, projects, selectedProject } = state;
+    const { workspaces, selectedWorkspace, projects, selectedProject, ui } = state;
+    const isEditWS = (id) => String(ui.editingWorkspaceId) === String(id);
+    const isEditProj = (id) => String(ui.editingProjectId) === String(id);
+
     return `
       <div class="w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
-        <div class="p-4 border-b dark:border-gray-800"><h1 class="font-bold text-xl dark:text-white">WellTask</h1></div>
+        <div class="p-6 border-b dark:border-gray-800"><h1 class="font-bold text-xl dark:text-white">WellTask</h1></div>
         <div class="p-4 flex-1 overflow-y-auto">
            <div class="mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">WORKSPACES</span><button onclick="actions.addWorkspace()" class="text-blue-500 text-xs">+ New</button></div>
-           ${workspaces.map(w => `<div onclick="actions.selectWorkspace('${w.id}')" class="p-2 rounded cursor-pointer ${String(w.id)===String(selectedWorkspace)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}">${w.name}</div>`).join('')}
+           ${workspaces.map(w => `
+             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(w.id)===String(selectedWorkspace)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectWorkspace('${w.id}')">
+               ${isEditWS(w.id) 
+                 ? `<input id="ws-name-input-${w.id}" value="${w.name}" onblur="actions.saveWorkspaceName('${w.id}')" onkeypress="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" class="bg-transparent border-b w-full" autofocus>`
+                 : `<span>${w.name}</span>`
+               }
+               <div class="flex gap-1">
+                 <button onclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                 <button onclick="event.stopPropagation(); actions.deleteWorkspace('${w.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
+               </div>
+             </div>
+           `).join('')}
            
            <div class="mt-6 mb-4 flex justify-between"><span class="text-xs font-bold text-gray-500">PROJECTS</span><button onclick="actions.addProject()" class="text-blue-500 text-xs">+ New</button></div>
-           ${projects.filter(p=>String(p.workspaceId)===String(selectedWorkspace)).map(p => `<div onclick="actions.selectProject('${p.id}')" class="p-2 rounded cursor-pointer ${String(p.id)===String(selectedProject)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'} flex justify-between group"><span>${p.name}</span><button onclick="event.stopPropagation(); actions.deleteProject('${p.id}')" class="hidden group-hover:block text-red-500 text-xs">Del</button></div>`).join('')}
+           ${projects.filter(p=>String(p.workspaceId)===String(selectedWorkspace)).map(p => `
+             <div class="flex items-center justify-between p-2 rounded cursor-pointer ${String(p.id)===String(selectedProject)?'bg-blue-100 text-blue-700': 'text-gray-700 dark:text-gray-300'}" onclick="actions.selectProject('${p.id}')">
+               ${isEditProj(p.id) 
+                 ? `<input id="proj-name-input-${p.id}" value="${p.name}" onblur="actions.saveProjectName('${p.id}')" onkeypress="if(event.key==='Enter') actions.saveProjectName('${p.id}')" class="bg-transparent border-b w-full" autofocus>`
+                 : `<span>${p.name}</span>`
+               }
+               <div class="flex gap-1">
+                 <button onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                 <button onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"><i data-lucide="trash-2" class="w-3 h-3 text-red-500"></i></button>
+               </div>
+             </div>
+           `).join('')}
         </div>
+        <div class="p-4 border-t dark:border-gray-800"><button onclick="actions.toggleTheme()" class="w-full flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white"><span>Theme</span><i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i></button></div>
       </div>
     `;
   }
 
   function renderKanbanView() {
-    const { groups, tasks, selectedProject } = state;
+    const { groups, tasks, selectedProject, ui } = state;
     const projectGroups = groups.filter(g => String(g.projectId) === String(selectedProject));
     
     return `
       <div class="flex h-full p-6 space-x-4 overflow-x-auto bg-gray-50 dark:bg-gray-900">
         ${projectGroups.map(grp => {
             const grpTasks = tasks.filter(t => String(t.groupId) === String(grp.id));
+            const isEditGrp = String(ui.editingGroupId) === String(grp.id);
             return `
             <div class="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-full">
-               <div class="p-3 border-b dark:border-gray-700 flex justify-between font-semibold dark:text-white"><span>${grp.name} <span class="text-xs text-gray-400">(${grpTasks.length})</span></span></div>
+               <div class="p-3 border-b dark:border-gray-700 flex justify-between items-center font-semibold dark:text-white">
+                 <div class="flex items-center gap-2">
+                   ${isEditGrp
+                     ? `<input id="group-name-input-${grp.id}" value="${grp.name}" onblur="actions.saveGroupName('${grp.id}')" onkeypress="if(event.key==='Enter') actions.saveGroupName('${grp.id}')" class="bg-transparent border-b w-32" autofocus>`
+                     : `<span>${grp.name}</span>`
+                   }
+                   <span class="text-xs text-gray-400">(${grpTasks.length})</span>
+                 </div>
+                 <div class="flex gap-1 text-gray-400">
+                    <button onclick="actions.startEditGroup('${grp.id}')"><i data-lucide="edit-2" class="w-3 h-3"></i></button>
+                    <button onclick="actions.deleteGroup('${grp.id}')"><i data-lucide="trash-2" class="w-3 h-3 hover:text-red-500"></i></button>
+                 </div>
+               </div>
+               
                <div class="flex-1 overflow-y-auto p-3 space-y-2">
                  ${grpTasks.map(t => `
                    <div class="p-3 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow-sm hover:shadow-md">
-                     ${String(state.ui.editingTaskId)===String(t.id) 
-                       ? `<input id="task-name-input-${t.id}" value="${t.name}" onblur="actions.saveTaskName('${t.id}')" class="w-full bg-transparent border-b" autofocus>` 
+                     ${String(ui.editingTaskId)===String(t.id) 
+                       ? `<input id="task-name-input-${t.id}" value="${t.name}" onblur="actions.saveTaskName('${t.id}')" onkeypress="if(event.key==='Enter') actions.saveTaskName('${t.id}')" class="w-full bg-transparent border-b" autofocus>` 
                        : `<div class="font-medium dark:text-white cursor-pointer" onclick="actions.startEditTaskName('${t.id}')">${t.name}</div>`}
                      <div class="mt-2 flex justify-between items-center text-xs text-gray-500">
-                        <span>${t.priority}</span>
-                        <button onclick="actions.deleteTask('${t.id}')" class="text-red-500">Del</button>
+                        <select onchange="actions.moveTaskToGroup('${t.id}', '${grp.id}')" class="bg-transparent"><option>${t.priority}</option></select>
+                        <button onclick="actions.deleteTask('${t.id}')" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
                      </div>
                    </div>
                  `).join('')}
                </div>
+
                <div class="p-3 border-t dark:border-gray-700">
-                 ${String(state.ui.showNewTask)===String(grp.id) 
-                   ? `<input id="new-task-name-${grp.id}" class="w-full border p-1 rounded mb-1 text-sm dark:bg-gray-700 dark:text-white" placeholder="Name..." onkeypress="if(event.key==='Enter') actions.submitTask('${grp.id}')"><button onclick="actions.submitTask('${grp.id}')" class="w-full bg-blue-500 text-white text-sm rounded py-1">Save</button>`
-                   : `<button onclick="actions.setShowNewTask('${grp.id}')" class="w-full text-blue-500 text-sm py-1 border border-dashed border-blue-300 rounded">+ Add Task</button>`}
+                 ${String(ui.showNewTask)===String(grp.id) 
+                   ? `<div class="space-y-2"><input id="new-task-name-${grp.id}" class="w-full border p-1 rounded text-sm dark:bg-gray-700 dark:text-white" placeholder="Name..." autofocus onkeypress="if(event.key==='Enter') actions.submitTask('${grp.id}')"><button onclick="actions.submitTask('${grp.id}')" class="w-full bg-green-500 text-white text-sm rounded py-1">Add</button></div>`
+                   : `<button onclick="actions.setShowNewTask('${grp.id}')" class="w-full text-blue-500 text-sm py-1 border border-dashed border-blue-300 rounded hover:bg-blue-50">+ Add Task</button>`}
                </div>
             </div>`;
         }).join('')}
-        <button onclick="actions.addGroup()" class="w-80 h-12 flex-shrink-0 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-400 hover:text-blue-500">+ Add Group</button>
+        <button onclick="actions.addGroup()" class="w-80 h-12 flex-shrink-0 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-400 hover:text-blue-500 gap-2"><i data-lucide="plus"></i> Add Group</button>
       </div>
     `;
   }
@@ -426,7 +515,6 @@
     lucide.createIcons();
   }
 
-  // Initial Sync
   if (state.currentUser) api.syncAll();
   renderApp();
 </script>
