@@ -31,11 +31,13 @@
 <div id="app"></div>
 
 <script>
-  // PASTE YOUR WEBHOOK URL HERE
-  const ZOHO_API_URL = "/api/proxy?";
-  // ---------- Auth ----------
+  // ---------- Auth + API URL ----------
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
+
+  // Webhook URL from Zoho Cliq widget (?api_url=...)
+  const apiUrlParam = urlParams.get('api_url');
+  const ZOHO_API_URL = apiUrlParam ? decodeURIComponent(apiUrlParam) : "";
 
   let currentUser = null;
   if (token) {
@@ -77,15 +79,33 @@
     groups: [
       {
         id: 1, name: 'To Do', projectId: 1, collapsed: false,
-        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
+        columns: [
+          { id: 'task', name: 'Task', isDefault: true },
+          { id: 'assignee', name: 'Assignee', isDefault: true },
+          { id: 'priority', name: 'Priority', isDefault: true },
+          { id: 'status', name: 'Status', isDefault: true },
+          { id: 'duedate', name: 'Due Date', isDefault: true }
+        ]
       },
       {
         id: 2, name: 'In Progress', projectId: 1, collapsed: false,
-        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
+        columns: [
+          { id: 'task', name: 'Task', isDefault: true },
+          { id: 'assignee', name: 'Assignee', isDefault: true },
+          { id: 'priority', name: 'Priority', isDefault: true },
+          { id: 'status', name: 'Status', isDefault: true },
+          { id: 'duedate', name: 'Due Date', isDefault: true }
+        ]
       },
       {
         id: 3, name: 'Done', projectId: 1, collapsed: false,
-        columns: [ { id: 'task', name: 'Task', isDefault: true }, { id: 'assignee', name: 'Assignee', isDefault: true }, { id: 'priority', name: 'Priority', isDefault: true }, { id: 'status', name: 'Status', isDefault: true }, { id: 'duedate', name: 'Due Date', isDefault: true } ]
+        columns: [
+          { id: 'task', name: 'Task', isDefault: true },
+          { id: 'assignee', name: 'Assignee', isDefault: true },
+          { id: 'priority', name: 'Priority', isDefault: true },
+          { id: 'status', name: 'Status', isDefault: true },
+          { id: 'duedate', name: 'Due Date', isDefault: true }
+        ]
       }
     ],
 
@@ -93,7 +113,14 @@
 
     ui: {
       showNewTask: null,
-      newTask: { name: '', assignee: null, priority: 'Medium', status: 'Not Started', dueDate: '', customFields: {} },
+      newTask: {
+        name: '',
+        assignee: null,
+        priority: 'Medium',
+        status: 'Not Started',
+        dueDate: '',
+        customFields: {}
+      },
       columnsGroupId: null,
       editingWorkspaceId: null, editingWorkspaceName: '',
       editingProjectId: null, editingProjectName: '',
@@ -106,7 +133,6 @@
 
   // ---------- Helpers ----------
   function getGroupIdFromStatus(status) {
-    // Simple fallback mapping
     if (status === 'In Progress') return 2;
     if (status === 'Done') return 3;
     return 1;
@@ -126,9 +152,11 @@
   const api = {
     // 1. SYNC ALL (Load Tasks & Metadata)
     syncAll: async () => {
-      if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
+      if (!state.currentUser || !ZOHO_API_URL) return;
       try {
-        const res = await fetch(`${ZOHO_API_URL}&request_method=GET&user_email=${state.currentUser.email}`);
+        const res = await fetch(
+          `${ZOHO_API_URL}&request_method=GET&user_email=${encodeURIComponent(state.currentUser.email)}`
+        );
         const json = await res.json();
         
         if (json.status === 'success' && json.data) {
@@ -136,48 +164,50 @@
           const serverMeta = json.data.metadata || [];
 
           // A. Load Metadata (Workspaces, Projects, Groups)
-          if(serverMeta.length > 0) {
-              const workspaces = [];
-              const projects = [];
-              const groups = [];
+          if (serverMeta.length > 0) {
+            const workspaces = [];
+            const projects = [];
+            const groups = [];
+            
+            serverMeta.forEach(m => {
+              let attrs = {};
+              try { attrs = m.attributes ? JSON.parse(m.attributes) : {}; } catch(e){}
               
-              serverMeta.forEach(m => {
-                  let attrs = {};
-                  try { attrs = JSON.parse(m.attributes); } catch(e){}
-                  
-                  if(m.recordtype === 'workspace') {
-                      workspaces.push({ id: String(m.id), name: m.name });
-                  } else if(m.recordtype === 'project') {
-                      projects.push({ id: String(m.id), name: m.name, workspaceId: m.relatedid, color: attrs.color || 'bg-blue-500' });
-                  } else if(m.recordtype === 'group') {
-                      groups.push({ 
-                          id: String(m.id), 
-                          name: m.name, 
-                          projectId: m.relatedid, 
-                          collapsed: attrs.collapsed || false,
-                          columns: attrs.columns || [] 
-                      });
-                  }
-              });
-              
-              // If we have data from server, replace local defaults
-              if(workspaces.length) state.workspaces = workspaces;
-              if(projects.length) state.projects = projects;
-              if(groups.length) state.groups = groups;
+              if (m.recordtype === 'workspace') {
+                workspaces.push({ id: String(m.id), name: m.name });
+              } else if (m.recordtype === 'project') {
+                projects.push({
+                  id: String(m.id),
+                  name: m.name,
+                  workspaceId: m.relatedid,
+                  color: attrs.color || 'bg-blue-500'
+                });
+              } else if (m.recordtype === 'group') {
+                groups.push({ 
+                  id: String(m.id), 
+                  name: m.name, 
+                  projectId: m.relatedid, 
+                  collapsed: attrs.collapsed || false,
+                  columns: attrs.columns || [] 
+                });
+              }
+            });
+            
+            if (workspaces.length) state.workspaces = workspaces;
+            if (projects.length) state.projects = projects;
+            if (groups.length) state.groups = groups;
           }
 
           // B. Load Tasks
           state.tasks = serverTasks.map(t => {
             let extras = { duedate: "", custom: {} };
-            try { if (t.customattributes) extras = JSON.parse(t.customattributes); } catch (e) {}
-            
-            // Try to find the group based on status or existing groups
+            try {
+              if (t.customattributes) extras = JSON.parse(t.customattributes);
+            } catch (e) {}
+
             let gId = getGroupIdFromStatus(t.status);
-            // If we have dynamic groups loaded, try to match ID if stored (advanced) or stick to status mapping
-            // For this version, we rely on status mapping for basic groups, or default to first group
-            if(state.groups.length > 0 && !['Not Started','In Progress','Done'].includes(t.status)) {
-                 // If status doesn't match standard, maybe assign to first group
-                 gId = state.groups[0].id;
+            if (state.groups.length > 0 && !['Not Started','In Progress','Done'].includes(t.status)) {
+              gId = state.groups[0].id;
             }
 
             return {
@@ -188,14 +218,17 @@
               assignee: t.assignee === 'Unassigned' ? null : { name: t.assignee },
               dueDate: extras.duedate || "",
               customFields: extras.custom || {},
-              projectId: state.selectedProject, // Simplified: assumes tasks belong to selected view
+              projectId: state.selectedProject,
               groupId: gId
             };
           });
 
-          // Validation check for selected IDs
-          if(!state.workspaces.find(w => w.id == state.selectedWorkspace)) state.selectedWorkspace = state.workspaces[0]?.id;
-          if(!state.projects.find(p => p.id == state.selectedProject)) state.selectedProject = state.projects[0]?.id;
+          if(!state.workspaces.find(w => w.id == state.selectedWorkspace)) {
+            state.selectedWorkspace = state.workspaces[0]?.id;
+          }
+          if(!state.projects.find(p => p.id == state.selectedProject)) {
+            state.selectedProject = state.projects[0]?.id;
+          }
 
           renderApp();
         }
@@ -206,32 +239,33 @@
 
     // 2. SAVE METADATA (Projects, Groups, Workspaces)
     saveMetadata: async (action, type, data) => {
-         const payload = {
-             name: data.name,
-             recordtype: type,
-             relatedid: data.relatedId || "",
-             attributes: JSON.stringify(data.attributes || {})
-         };
-         
-         let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${state.currentUser.email}`;
-         for (const [key, value] of Object.entries(payload)) {
-             url += `&${key}=${encodeURIComponent(value)}`;
-         }
-         if(data.id && action !== 'create') url += `&id=${data.id}`;
+      if (!state.currentUser || !ZOHO_API_URL) return;
 
-         try {
-             await fetch(url);
-             // If we created something, we need the real ID from the server, so we sync
-             if(action === 'create') api.syncAll(); 
-         } catch(e) { console.error(e); }
+      const payload = {
+        name: data.name,
+        recordtype: type,
+        relatedid: data.relatedId || "",
+        attributes: JSON.stringify(data.attributes || {})
+      };
+      
+      let url = `${ZOHO_API_URL}&request_method=POST&type=metadata&action=${action}&user_email=${encodeURIComponent(state.currentUser.email)}`;
+      for (const [key, value] of Object.entries(payload)) {
+        url += `&${key}=${encodeURIComponent(value)}`;
+      }
+      if (data.id && action !== 'create') url += `&id=${encodeURIComponent(data.id)}`;
+
+      try {
+        await fetch(url);
+        if (action === 'create') api.syncAll();
+      } catch(e) { console.error(e); }
     },
 
     // 3. TASK OPERATIONS
     createTask: async (groupId) => {
+      if (!state.currentUser || !ZOHO_API_URL) return;
       const taskData = state.ui.newTask;
       if (!taskData.name.trim()) return;
 
-      // Optimistic UI
       const tempId = String(uid());
       state.tasks.push({
         id: tempId,
@@ -249,15 +283,15 @@
 
       try {
         await fetch(
-          `${ZOHO_API_URL}&request_method=POST&type=task&action=create` +
+          `${ZOHO_API_URL}` +
+          `&request_method=POST&type=task&action=create` +
           `&name=${encodeURIComponent(taskData.name)}` +
-          `&user_email=${state.currentUser.email}` +
+          `&user_email=${encodeURIComponent(state.currentUser.email)}` +
           `&status=${encodeURIComponent(taskData.status)}` +
           `&priority=${encodeURIComponent(taskData.priority)}` +
           `&assignee=${encodeURIComponent(taskData.assignee ? taskData.assignee.name : 'Unassigned')}` + 
           `&attributes=${encodeURIComponent(packed)}`
         );
-        // Fetch to get real ID
         await api.syncAll(); 
       } catch (e) {
         console.error("Create Error", e);
@@ -265,7 +299,7 @@
     },
 
     updateTask: async (task) => {
-      if (!state.currentUser || ZOHO_API_URL.includes("PASTE_YOUR")) return;
+      if (!state.currentUser || !ZOHO_API_URL) return;
       try {
         const packed = JSON.stringify({
           duedate: task.dueDate || "",
@@ -273,10 +307,11 @@
         });
 
         await fetch(
-          `${ZOHO_API_URL}&request_method=POST&type=task&action=update` +
+          `${ZOHO_API_URL}` +
+          `&request_method=POST&type=task&action=update` +
           `&id=${encodeURIComponent(task.id)}` +
           `&name=${encodeURIComponent(task.name)}` +
-          `&user_email=${state.currentUser.email}` +
+          `&user_email=${encodeURIComponent(state.currentUser.email)}` +
           `&status=${encodeURIComponent(task.status)}` +
           `&priority=${encodeURIComponent(task.priority)}` +
           `&assignee=${encodeURIComponent(task.assignee ? task.assignee.name : 'Unassigned')}` +
@@ -288,10 +323,13 @@
     },
 
     deleteTask: async (id) => {
+      if (!ZOHO_API_URL) return;
       state.tasks = state.tasks.filter(t => t.id !== id);
       renderApp();
       try {
-        await fetch(`${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`);
+        await fetch(
+          `${ZOHO_API_URL}&request_method=POST&type=task&action=delete&id=${encodeURIComponent(id)}`
+        );
       } catch (e) {
         console.error("Delete Error", e);
       }
@@ -333,8 +371,8 @@
       if (ws) {
         const val = input.value.trim();
         if (val) {
-            ws.name = val;
-            api.saveMetadata('update', 'workspace', ws);
+          ws.name = val;
+          api.saveMetadata('update', 'workspace', ws);
         }
       }
       state.ui.editingWorkspaceId = null;
@@ -344,7 +382,6 @@
     deleteWorkspace: (id) => {
       if (state.workspaces.length === 1) return;
       state.workspaces = state.workspaces.filter(w => w.id != id);
-      // In real app, we'd delete children too, but for now we just remove the WS
       if (state.selectedWorkspace == id) {
         state.selectedWorkspace = state.workspaces[0]?.id ?? null;
       }
@@ -365,9 +402,9 @@
       state.selectedProject = id;
       renderApp();
       api.saveMetadata('create', 'project', { 
-          name: newProj.name, 
-          relatedId: newProj.workspaceId,
-          attributes: { color: newProj.color }
+        name: newProj.name, 
+        relatedId: newProj.workspaceId,
+        attributes: { color: newProj.color }
       });
     },
     selectProject: (id) => { state.selectedProject = String(id); renderApp(); },
@@ -385,13 +422,13 @@
       if (p) {
         const val = input.value.trim();
         if (val) {
-            p.name = val;
-            api.saveMetadata('update', 'project', { 
-                id: p.id, 
-                name: p.name, 
-                relatedId: p.workspaceId,
-                attributes: { color: p.color } 
-            });
+          p.name = val;
+          api.saveMetadata('update', 'project', { 
+            id: p.id, 
+            name: p.name, 
+            relatedId: p.workspaceId,
+            attributes: { color: p.color } 
+          });
         }
       }
       state.ui.editingProjectId = null;
@@ -410,12 +447,12 @@
     toggleGroupCollapse: (id) => {
       const g = state.groups.find(gr => gr.id == id);
       if (g) {
-          g.collapsed = !g.collapsed;
-          renderApp();
-          api.saveMetadata('update', 'group', { 
-              id: g.id, name: g.name, relatedId: g.projectId,
-              attributes: { collapsed: g.collapsed, columns: g.columns }
-          });
+        g.collapsed = !g.collapsed;
+        renderApp();
+        api.saveMetadata('update', 'group', { 
+          id: g.id, name: g.name, relatedId: g.projectId,
+          attributes: { collapsed: g.collapsed, columns: g.columns }
+        });
       }
     },
     addGroup: () => {
@@ -431,8 +468,8 @@
       state.groups.push(newGroup);
       renderApp();
       api.saveMetadata('create', 'group', { 
-          name: newGroup.name, relatedId: newGroup.projectId,
-          attributes: { collapsed: false, columns: newGroup.columns }
+        name: newGroup.name, relatedId: newGroup.projectId,
+        attributes: { collapsed: false, columns: newGroup.columns }
       });
     },
     startEditGroup: (id) => {
@@ -449,11 +486,11 @@
       if (g) {
         const val = input.value.trim();
         if (val) {
-            g.name = val;
-            api.saveMetadata('update', 'group', { 
-                id: g.id, name: g.name, relatedId: g.projectId,
-                attributes: { collapsed: g.collapsed, columns: g.columns }
-            });
+          g.name = val;
+          api.saveMetadata('update', 'group', { 
+            id: g.id, name: g.name, relatedId: g.projectId,
+            attributes: { collapsed: g.collapsed, columns: g.columns }
+          });
         }
       }
       state.ui.editingGroupId = null;
@@ -467,7 +504,7 @@
       api.saveMetadata('delete', 'group', { id });
     },
 
-    // Columns (Saves as update to Group)
+    // Columns
     toggleColumnsPanel: (groupId) => {
       state.ui.columnsGroupId = state.ui.columnsGroupId === groupId ? null : groupId;
       renderApp();
@@ -482,8 +519,8 @@
       });
       renderApp();
       api.saveMetadata('update', 'group', { 
-          id: g.id, name: g.name, relatedId: g.projectId,
-          attributes: { collapsed: g.collapsed, columns: g.columns }
+        id: g.id, name: g.name, relatedId: g.projectId,
+        attributes: { collapsed: g.collapsed, columns: g.columns }
       });
     },
     renameColumn: (groupId, colId) => {
@@ -495,10 +532,9 @@
       if (col) {
         col.name = input.value.trim() || col.name;
         renderApp();
-        // Debouncing would be better here, but for now we save on rename
         api.saveMetadata('update', 'group', { 
-            id: g.id, name: g.name, relatedId: g.projectId,
-            attributes: { collapsed: g.collapsed, columns: g.columns }
+          id: g.id, name: g.name, relatedId: g.projectId,
+          attributes: { collapsed: g.collapsed, columns: g.columns }
         });
       }
     },
@@ -506,7 +542,6 @@
       const g = state.groups.find(gr => gr.id == groupId);
       if (!g) return;
       g.columns = g.columns.filter(c => c.id !== colId);
-      // Remove data from tasks
       state.tasks.forEach(t => {
         if (t.customFields && t.customFields[colId] !== undefined) {
           delete t.customFields[colId];
@@ -514,8 +549,8 @@
       });
       renderApp();
       api.saveMetadata('update', 'group', { 
-          id: g.id, name: g.name, relatedId: g.projectId,
-          attributes: { collapsed: g.collapsed, columns: g.columns }
+        id: g.id, name: g.name, relatedId: g.projectId,
+        attributes: { collapsed: g.collapsed, columns: g.columns }
       });
     },
 
@@ -526,7 +561,6 @@
         name: '',
         assignee: null,
         priority: 'Medium',
-        // status based on group 
         status: (groupId === 2 ? 'In Progress' : (groupId === 3 ? 'Done' : 'Not Started')),
         dueDate: '',
         customFields: {}
@@ -582,9 +616,9 @@
       const t = state.tasks.find(task => task.id == id);
       if (!t) return;
       t.groupId = groupId;
-      if (groupId === 1) t.status = 'Not Started';
-      if (groupId === 2) t.status = 'In Progress';
-      if (groupId === 3) t.status = 'Done';
+      if (groupId == 1) t.status = 'Not Started';
+      if (groupId == 2) t.status = 'In Progress';
+      if (groupId == 3) t.status = 'Done';
       renderApp();
       api.updateTask(t);
     }
@@ -828,7 +862,7 @@
                   </div>
                   <div class="flex justify-between items-center text-xs ${subtleText}">
                     <div class="flex items-center gap-2">
-                      <select onchange="actions.moveTaskToGroup('${t.id}', parseInt(this.value))"
+                      <select onchange="actions.moveTaskToGroup('${t.id}', this.value)"
                               class="bg-gray-100 dark:bg-gray-800 rounded px-2 py-1">
                         ${groups.filter(g => String(g.projectId) === String(selectedProject)).map(g => `
                           <option value="${g.id}" ${String(g.id) === String(t.groupId) ? 'selected' : ''}>${g.name}</option>
@@ -1185,4 +1219,3 @@
 </script>
 </body>
 </html>
-
