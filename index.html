@@ -35,22 +35,23 @@
 
   <script>
     // ==========================
-    // CONFIG (channel-based)
+    // CONFIG
     // ==========================
     const ZOHO_API_URL = "/api/proxy";
 
+    // Read URL params from widget URL
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    const boardidFromUrl = urlParams.get("boardid");   // ?boardid=<channel_id>
+    const boardidFromUrl = urlParams.get("boardid"); // channel-based board id
 
     let currentUser = null;
-    let boardid = boardidFromUrl || null;              // shared key per channel
+    let boardid = boardidFromUrl || null;
 
+    // Decode token: email::user_id::boardid (if present)
     if (token) {
       try {
         const decoded = atob(token);
-        const parts = decoded.split("::");             // email::userId[::channelId]
-
+        const parts = decoded.split("::");
         if (parts.length >= 2) {
           currentUser = {
             id: parts[1],
@@ -58,8 +59,7 @@
             email: parts[0]
           };
         }
-
-        // fallback: token also contains channelId
+        // If token also carries boardid (3rd part), prefer that
         if (!boardid && parts.length >= 3) {
           boardid = parts[2];
         }
@@ -68,17 +68,15 @@
       }
     }
 
-    // final fallback: personal board by email (if you ever open outside channel)
-    if (!boardid && currentUser && currentUser.email) {
-      boardid = currentUser.email;
-    }
-
     const uid = () =>
       Date.now().toString() + Math.floor(Math.random() * 1000);
 
-    // ✅ now per-channel (or per email fallback)
+    // Use boardid for shared board; fallback to user email for personal
     function getStorageKey() {
-      return boardid ? `welltask_state_${boardid}` : null;
+      if (boardid) {
+        return `welltask_state_${boardid}`;
+      }
+      return currentUser ? `welltask_state_${currentUser.email}` : null;
     }
 
     function priorityClass(priority) {
@@ -102,7 +100,8 @@
     const initialState = {
       darkMode: false,
       currentUser,
-      showLogin: !currentUser,
+      // show login only if we have neither user nor boardid
+      showLogin: !currentUser && !boardid,
       isLoading: false,
       saveStatus: "saved",
       currentView: "list", // "list" | "kanban"
@@ -144,9 +143,9 @@
       saveTimer: null,
 
       load: async () => {
-        if (!boardid) {
-          console.error("No boardid available");
-          api.initDefaults();
+        // If we have neither boardid nor user, we can't load anything
+        if (!boardid && !state.currentUser) {
+          state.showLogin = true;
           renderApp();
           return;
         }
@@ -156,6 +155,7 @@
 
         try {
           const key = getStorageKey();
+          // 1) Try localStorage first
           if (key) {
             const stored = localStorage.getItem(key);
             if (stored) {
@@ -191,41 +191,85 @@
             }
           }
 
-          console.log("ℹ️ No localStorage state, trying backend.");
-          // ✅ load from Zoho DB using boardid
-          const res = await fetch(ZOHO_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "load",
-              boardid: boardid
-            })
-          });
+          // 2) If no local state, try backend (shared board)
+          try {
+            console.log("🌐 No local state, loading from backend using boardid:", boardid);
+            const res = await fetch(ZOHO_API_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "load",
+                boardid: boardid || (state.currentUser ? state.currentUser.id : "")
+              })
+            });
 
-          const json = await res.json();
-          console.log("📥 Load response from proxy:", json);
+            const text = await res.text();
+            console.log("📥 Raw load response from proxy:", text);
 
-          if (json && json.data && typeof json.data === "object") {
-            const parsed = json.data;
-            state.workspaces = parsed.workspaces || [];
-            state.projects = parsed.projects || [];
-            state.groups = parsed.groups || [];
-            state.tasks = parsed.tasks || [];
-            state.currentView = parsed.currentView || "list";
-            state.darkMode = !!parsed.darkMode;
-
-            if (state.workspaces.length > 0) {
-              state.selectedWorkspace = state.workspaces[0].id;
+            let respJson = null;
+            try {
+              respJson = JSON.parse(text);
+            } catch (e) {
+              console.warn("Backend load JSON parse error:", e);
             }
-            if (state.projects.length > 0) {
-              const proj = state.projects.find(
-                p => p.workspaceId === state.selectedWorkspace
-              );
-              state.selectedProject =
-                (proj && proj.id) || state.projects[0].id;
+
+            if (
+              respJson &&
+              respJson.status === "success" &&
+              respJson.data &&
+              typeof respJson.data === "object"
+            ) {
+              const parsed = respJson.data;
+              console.log("✅ Backend returned saved state:", parsed);
+
+              state.workspaces = parsed.workspaces || [];
+              state.projects = parsed.projects || [];
+              state.groups = parsed.groups || [];
+              state.tasks = parsed.tasks || [];
+              state.currentView = parsed.currentView || "list";
+              state.darkMode = !!parsed.darkMode;
+
+              if (state.workspaces.length > 0) {
+                state.selectedWorkspace = state.workspaces[0].id;
+              }
+              if (state.projects.length > 0) {
+                const proj = state.projects.find(
+                  p => p.workspaceId === state.selectedWorkspace
+                );
+                state.selectedProject =
+                  (proj && proj.id) || state.projects[0].id;
+              }
+
+              // Cache backend data into localStorage for this board
+              const key2 = getStorageKey();
+              if (key2) {
+                try {
+                  localStorage.setItem(
+                    key2,
+                    JSON.stringify({
+                      darkMode: state.darkMode,
+                      currentView: state.currentView,
+                      workspaces: state.workspaces,
+                      projects: state.projects,
+                      groups: state.groups,
+                      tasks: state.tasks
+                    })
+                  );
+                  console.log("📂 Cached backend state to localStorage");
+                } catch (e) {
+                  console.warn("localStorage save failed:", e);
+                }
+              }
+
+              state.isLoading = false;
+              renderApp();
+              return;
+            } else {
+              console.log("ℹ️ No backend state found, using defaults.");
+              api.initDefaults();
             }
-          } else {
-            console.log("ℹ️ No DB state, using defaults.");
+          } catch (e) {
+            console.warn("Backend load failed, using defaults:", e);
             api.initDefaults();
           }
         } catch (e) {
@@ -298,7 +342,9 @@
       },
 
       performSave: async () => {
-        if (!boardid) return;
+        // Must have a boardid (channel or user-based) to save
+        if (!boardid && !state.currentUser) return;
+
         try {
           state.saveStatus = "saving";
           renderStatusIndicator();
@@ -324,13 +370,12 @@
             }
           }
 
-          // ✅ save to Zoho DB by boardid (channel-based)
           const res = await fetch(ZOHO_API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "save",
-              boardid: boardid,
+              boardid: boardid || (state.currentUser ? state.currentUser.id : ""),
               data_payload: JSON.stringify(payload)
             })
           });
@@ -339,6 +384,7 @@
           console.log("📥 Raw save response from proxy:", text);
 
           if (res.ok) {
+            console.log("✅ Save treated as success (HTTP 200)");
             state.saveStatus = "saved";
           } else {
             console.error("❌ Save HTTP error:", res.status);
@@ -354,7 +400,7 @@
     };
 
     // ==========================
-    // ACTIONS (unchanged)
+    // ACTIONS
     // ==========================
     const actions = {
       toggleTheme: () => {
@@ -524,12 +570,12 @@
           columns: baseGroup
             ? JSON.parse(JSON.stringify(baseGroup.columns))
             : [
-                { id: "task", name: "Task", isDefault: true },
-                { id: "assignee", name: "Assignee", isDefault: true },
-                { id: "priority", name: "Priority", isDefault: true },
-                { id: "status", name: "Status", isDefault: true },
-                { id: "duedate", name: "Due Date", isDefault: true }
-              ]
+              { id: "task", name: "Task", isDefault: true },
+              { id: "assignee", name: "Assignee", isDefault: true },
+              { id: "priority", name: "Priority", isDefault: true },
+              { id: "status", name: "Status", isDefault: true },
+              { id: "duedate", name: "Due Date", isDefault: true }
+            ]
         };
         state.groups.push(newGroup);
         renderApp();
@@ -620,8 +666,8 @@
             groupId === 2
               ? "In Progress"
               : groupId === 3
-              ? "Done"
-              : "Not Started",
+                ? "Done"
+                : "Not Started",
           dueDate: "",
           customFields: {}
         };
@@ -706,7 +752,7 @@
     window.actions = actions;
 
     // ==========================
-    // RENDER HELPERS (same UI)
+    // RENDER HELPERS
     // ==========================
     function renderStatusIndicator() {
       const el = document.getElementById("save-status");
@@ -1070,7 +1116,6 @@
                   <span class="bg-gray-100 dark:bg-gray-900 ${subtleText} text-xs px-2 py-1 rounded-full">${grpTasks.length}</span>
                 </div>
                 <div class="flex items-center gap-2 text-xs ${subtleText}">
-
                   <button onclick="actions.toggleColumnsPanel('${grp.id}')"
                           class="flex items-center gap-1 hover:text-gray-700">
                     <i data-lucide="columns-3" class="w-3 h-3"></i> Columns
@@ -1273,7 +1318,7 @@
                   </button>
                   <button onclick="actions.startEditGroup('${grp.id}')"
                           class="hover:text-gray-700 flex items-center gap-1">
-                    <i data-lucide="edit-2" class="w-4 h-4"></i> Rename
+                    <i data-lucide="edit-2" class="w-3 h-3"></i> Rename
                   </button>
                   <button onclick="actions.deleteGroup('${grp.id}')"
                           class="hover:text-red-600 text-red-500 flex items-center gap-1">
@@ -1343,7 +1388,7 @@
       const app = document.getElementById("app");
       if (!app) return;
 
-      if (state.showLogin && !boardid) {
+      if (state.showLogin) {
         app.innerHTML = renderLogin();
       } else {
         document.documentElement.classList.toggle("dark", state.darkMode);
@@ -1377,7 +1422,8 @@
     // ==========================
     // BOOT
     // ==========================
-    if (boardid) {
+    // If we have a boardid (channel/user) OR a currentUser, try to load
+    if (boardid || state.currentUser) {
       api.load();
     } else {
       renderApp();
