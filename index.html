@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WellTask</title>
 
-  <!-- Tailwind + Lucide -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -22,7 +21,6 @@
     };
   </script>
 
-  <!-- Scrollbar styling -->
   <style>
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -30,7 +28,6 @@
     .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
   </style>
 
-  <!-- ✅ Firebase compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
 
@@ -58,27 +55,21 @@
 
   <script>
     // ==========================
-    // CONFIG
+    // CONFIG & UTILS
     // ==========================
-    // We NO LONGER use Zoho proxy for DB
-    // const ZOHO_API_URL = "/api/proxy";
-
     console.log("💾 Firestore db available?", !!db);
 
-    // Read URL params from widget URL
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    const boardidFromUrl = urlParams.get("boardid"); // channel-based board id
+    const boardidFromUrl = urlParams.get("boardid"); 
 
     let currentUser = null;
     let boardid = boardidFromUrl || null;
 
-    // Decode token: email::user_id::boardid (if present)
     if (token) {
       try {
         const decoded = atob(token);
         const parts = decoded.split("::");
-        console.log("🔐 Decoded token parts:", parts);
         if (parts.length >= 2) {
           currentUser = {
             id: parts[1],
@@ -94,29 +85,20 @@
       }
     }
 
-    const uid = () =>
-      Date.now().toString() + Math.floor(Math.random() * 1000);
+    const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
-    // Use boardid for shared board; fallback to user email for personal
     function getStorageKey() {
-      if (boardid) {
-        return `welltask_state_${boardid}`;
-      }
+      if (boardid) return `welltask_state_${boardid}`;
       return currentUser ? `welltask_state_${currentUser.email}` : null;
     }
 
     function priorityClass(priority) {
       switch (priority) {
-        case "Critical":
-          return "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300";
-        case "High":
-          return "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300";
-        case "Medium":
-          return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200";
-        case "Low":
-          return "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300";
-        default:
-          return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200";
+        case "Critical": return "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300";
+        case "High": return "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300";
+        case "Medium": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200";
+        case "Low": return "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300";
+        default: return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200";
       }
     }
 
@@ -125,20 +107,11 @@
     // ==========================
     async function firebaseLoadBoard(docId) {
       try {
-        if (!docId) {
-          console.warn("⚠️ firebaseLoadBoard called with empty docId");
-          return null;
-        }
-        console.log("🌐 [Firebase] Loading board:", docId);
+        if (!docId) return null;
         const ref = db.collection("boards").doc(docId);
         const snap = await ref.get();
-        if (!snap.exists) {
-          console.log("ℹ️ [Firebase] No document yet for board:", docId);
-          return null;
-        }
-        const data = snap.data();
-        console.log("✅ [Firebase] Loaded data for board:", docId, data);
-        return data;
+        if (!snap.exists) return null;
+        return snap.data();
       } catch (e) {
         console.error("💥 [Firebase] Load error:", e);
         return null;
@@ -147,18 +120,9 @@
 
     async function firebaseSaveBoard(docId, payload) {
       try {
-        if (!docId) {
-          console.warn("⚠️ firebaseSaveBoard called with empty docId");
-          return;
-        }
-        console.log("🌐 [Firebase] Saving board:", docId, payload);
+        if (!docId) return;
         const ref = db.collection("boards").doc(docId);
-        await ref.set({
-          ...payload,
-          boardid: docId,
-          updatedAt: Date.now()
-        });
-        console.log("✅ [Firebase] Saved board:", docId);
+        await ref.set({ ...payload, boardid: docId, updatedAt: Date.now() });
       } catch (e) {
         console.error("💥 [Firebase] Save error:", e);
       }
@@ -173,25 +137,16 @@
       showLogin: !currentUser && !boardid,
       isLoading: false,
       saveStatus: "saved",
-      currentView: "list", // "list" | "kanban"
-
+      currentView: "list",
       workspaces: [],
       selectedWorkspace: null,
       projects: [],
       selectedProject: null,
       groups: [],
       tasks: [],
-
       ui: {
         showNewTask: null,
-        newTask: {
-          name: "",
-          assignee: null,
-          priority: "Medium",
-          status: "Not Started",
-          dueDate: "",
-          customFields: {}
-        },
+        newTask: { name: "", assignee: null, priority: "Medium", status: "Not Started", dueDate: "", customFields: {} },
         columnsGroupId: null,
         editingWorkspaceId: null,
         editingWorkspaceName: "",
@@ -206,126 +161,50 @@
     let state = { ...initialState };
 
     // ==========================
-    // API + LOCAL STORAGE
+    // API
     // ==========================
     const api = {
       saveTimer: null,
-
       load: async () => {
         if (!boardid && !state.currentUser) {
-          console.log("⚠️ No boardid or currentUser – showing login");
           state.showLogin = true;
           renderApp();
           return;
         }
-
         state.isLoading = true;
         renderApp();
-        console.log("🚀 api.load start. boardid =", boardid, "user =", state.currentUser);
-
         try {
           const key = getStorageKey();
+          let loaded = false;
 
-          // 1) Try localStorage first
+          // 1. Try LocalStorage
           if (key) {
             const stored = localStorage.getItem(key);
             if (stored) {
-              console.log("📂 Loaded from localStorage for key:", key);
               try {
                 const parsed = JSON.parse(stored);
-                if (parsed && typeof parsed === "object") {
-                  state.workspaces = parsed.workspaces || [];
-                  state.projects   = parsed.projects   || [];
-                  state.groups     = parsed.groups     || [];
-                  state.tasks      = parsed.tasks      || [];
-                  state.currentView = parsed.currentView || "list";
-                  state.darkMode    = !!parsed.darkMode;
-
-                  if (state.workspaces.length > 0) {
-                    state.selectedWorkspace = state.workspaces[0].id;
-                  }
-                  if (state.projects.length > 0) {
-                    const proj = state.projects.find(
-                      p => p.workspaceId === state.selectedWorkspace
-                    );
-                    state.selectedProject =
-                      (proj && proj.id) || state.projects[0].id;
-                  }
-
-                  state.isLoading = false;
-                  renderApp();
-                  return;
-                }
-              } catch (e) {
-                console.warn("localStorage parse error:", e);
-              }
-            } else {
-              console.log("ℹ️ No localStorage data for key:", key);
+                applyLoadedState(parsed);
+                loaded = true;
+              } catch(e) { console.warn(e); }
             }
           }
 
-          // 2) Try Firebase shared board
-          try {
-            const docId = boardid || (state.currentUser ? state.currentUser.id : "");
-            console.log("🌐 Loading from Firebase using docId:", docId);
-
-            const parsed = await firebaseLoadBoard(docId);
-
-            if (parsed && typeof parsed === "object") {
-              console.log("✅ Firebase returned saved state:", parsed);
-
-              state.workspaces = parsed.workspaces || [];
-              state.projects   = parsed.projects   || [];
-              state.groups     = parsed.groups     || [];
-              state.tasks      = parsed.tasks      || [];
-              state.currentView = parsed.currentView || "list";
-              state.darkMode    = !!parsed.darkMode;
-
-              if (state.workspaces.length > 0) {
-                state.selectedWorkspace = state.workspaces[0].id;
-              }
-              if (state.projects.length > 0) {
-                const proj = state.projects.find(
-                  p => p.workspaceId === state.selectedWorkspace
-                );
-                state.selectedProject =
-                  (proj && proj.id) || state.projects[0].id;
-              }
-
-              // Cache backend data into localStorage
-              const key2 = getStorageKey();
-              if (key2) {
-                try {
-                  localStorage.setItem(
-                    key2,
-                    JSON.stringify({
-                      darkMode: state.darkMode,
-                      currentView: state.currentView,
-                      workspaces: state.workspaces,
-                      projects: state.projects,
-                      groups: state.groups,
-                      tasks: state.tasks
-                    })
-                  );
-                  console.log("💾 Cached Firebase data into localStorage for key:", key2);
-                } catch (e) {
-                  console.warn("localStorage save failed:", e);
-                }
-              }
-
-              state.isLoading = false;
-              renderApp();
-              return;
-            } else {
-              console.log("ℹ️ No Firebase state found for this board. Using defaults.");
-              api.initDefaults();
-            }
-          } catch (e) {
-            console.warn("Firebase load failed, using defaults:", e);
-            api.initDefaults();
+          // 2. Try Firebase (Overwrites local if found)
+          if (!loaded || boardid) { // Always check firebase if shared board
+             const docId = boardid || (state.currentUser ? state.currentUser.id : "");
+             const fbData = await firebaseLoadBoard(docId);
+             if (fbData) {
+               applyLoadedState(fbData);
+               loaded = true;
+               // Cache to local
+               if(key) localStorage.setItem(key, JSON.stringify(fbData));
+             }
           }
+
+          if (!loaded) api.initDefaults();
+
         } catch (e) {
-          console.error("💥 Load exception:", e);
+          console.error(e);
           api.initDefaults();
         } finally {
           state.isLoading = false;
@@ -334,11 +213,9 @@
       },
 
       initDefaults: () => {
-        console.log("🆕 initDefaults called – creating starter workspace/project/groups");
         const wsId = uid();
         const pId = uid();
         const g1 = uid(), g2 = uid(), g3 = uid();
-
         const defaultColumns = [
           { id: "task", name: "Task", isDefault: true },
           { id: "assignee", name: "Assignee", isDefault: true },
@@ -348,42 +225,15 @@
         ];
 
         state.workspaces = [{ id: wsId, name: "My Workspace" }];
-        state.projects = [
-          {
-            id: pId,
-            name: "Marketing Campaign",
-            color: "bg-purple-500",
-            workspaceId: wsId
-          }
-        ];
+        state.projects = [{ id: pId, name: "Marketing Campaign", color: "bg-purple-500", workspaceId: wsId }];
         state.groups = [
-          {
-            id: g1,
-            name: "To Do",
-            projectId: pId,
-            collapsed: false,
-            columns: JSON.parse(JSON.stringify(defaultColumns))
-          },
-          {
-            id: g2,
-            name: "In Progress",
-            projectId: pId,
-            collapsed: false,
-            columns: JSON.parse(JSON.stringify(defaultColumns))
-          },
-          {
-            id: g3,
-            name: "Done",
-            projectId: pId,
-            collapsed: false,
-            columns: JSON.parse(JSON.stringify(defaultColumns))
-          }
+          { id: g1, name: "To Do", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
+          { id: g2, name: "In Progress", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
+          { id: g3, name: "Done", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) }
         ];
         state.tasks = [];
         state.selectedWorkspace = wsId;
         state.selectedProject = pId;
-        state.currentView = "list";
-
         api.triggerSave();
       },
 
@@ -395,15 +245,10 @@
       },
 
       performSave: async () => {
-        if (!boardid && !state.currentUser) {
-          console.warn("⚠️ performSave called with no boardid and no user");
-          return;
-        }
-
+        if (!boardid && !state.currentUser) return;
         try {
           state.saveStatus = "saving";
           renderStatusIndicator();
-
           const payload = {
             darkMode: state.darkMode,
             currentView: state.currentView,
@@ -413,26 +258,13 @@
             tasks: state.tasks
           };
 
-          console.log("💾 performSave payload:", payload);
-
-          // 1) localStorage (per board)
           const key = getStorageKey();
-          if (key) {
-            try {
-              localStorage.setItem(key, JSON.stringify(payload));
-              console.log("📂 Saved to localStorage key:", key);
-            } catch (e) {
-              console.warn("localStorage save failed:", e);
-            }
-          }
+          if (key) localStorage.setItem(key, JSON.stringify(payload));
 
-          // 2) Firebase (shared document)
           const docId = boardid || (state.currentUser ? state.currentUser.id : "");
           await firebaseSaveBoard(docId, payload);
-
           state.saveStatus = "saved";
         } catch (e) {
-          console.error("💥 Save exception:", e);
           state.saveStatus = "error";
         } finally {
           renderStatusIndicator();
@@ -440,394 +272,493 @@
       }
     };
 
+    function applyLoadedState(parsed) {
+      state.workspaces = parsed.workspaces || [];
+      state.projects = parsed.projects || [];
+      state.groups = parsed.groups || [];
+      state.tasks = parsed.tasks || [];
+      state.currentView = parsed.currentView || "list";
+      state.darkMode = !!parsed.darkMode;
+      
+      // Reselect logic
+      if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
+      if (state.projects.length > 0) {
+        const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
+        state.selectedProject = (proj && proj.id) || state.projects[0].id;
+      }
+    }
+
     // ==========================
-    // ACTIONS (same as your code)
+    // ACTIONS
     // ==========================
     const actions = {
-      toggleTheme: () => {
-        state.darkMode = !state.darkMode;
-        renderApp();
-        api.triggerSave();
-      },
-
-      setView: (view) => {
-        state.currentView = view;
-        renderApp();
-        api.triggerSave();
-      },
-
-      // Workspaces
+      toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
+      setView: (view) => { state.currentView = view; renderApp(); api.triggerSave(); },
       selectWorkspace: (id) => {
         state.selectedWorkspace = id;
         const proj = state.projects.find(p => p.workspaceId === id);
         state.selectedProject = proj ? proj.id : null;
         renderApp();
       },
-
       addWorkspace: () => {
         const id = uid();
-        const ws = { id, name: "New Workspace" };
-        state.workspaces.push(ws);
+        state.workspaces.push({ id, name: "New Workspace" });
         state.selectedWorkspace = id;
-        renderApp();
-        api.triggerSave();
+        renderApp(); api.triggerSave();
       },
-
       startEditWorkspace: (id) => {
         const ws = state.workspaces.find(w => w.id === id);
-        if (!ws) return;
-        state.ui.editingWorkspaceId = id;
-        state.ui.editingWorkspaceName = ws.name;
-        renderApp();
+        if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
       },
-
       saveWorkspaceName: (id) => {
         const input = document.getElementById(`ws-name-input-${id}`);
         const ws = state.workspaces.find(w => w.id === id);
-        if (ws && input) {
-          const val = input.value.trim();
-          if (val) ws.name = val;
-          api.triggerSave();
-        }
-        state.ui.editingWorkspaceId = null;
-        state.ui.editingWorkspaceName = "";
-        renderApp();
+        if (ws && input && input.value.trim()) { ws.name = input.value.trim(); api.triggerSave(); }
+        state.ui.editingWorkspaceId = null; renderApp();
       },
-
       deleteWorkspace: (id) => {
-        if (state.workspaces.length <= 1) {
-          alert("Cannot delete the last workspace.");
-          return;
-        }
-        state.workspaces = state.workspaces.filter(w => w.id !== id);
-        if (state.selectedWorkspace === id) {
-          state.selectedWorkspace = state.workspaces[0].id;
-        }
-        const toRemoveProjects = state.projects
-          .filter(p => p.workspaceId === id)
-          .map(p => p.id);
-        state.projects = state.projects.filter(p => p.workspaceId !== id);
-        state.groups = state.groups.filter(g => !toRemoveProjects.includes(g.projectId));
-        state.tasks = state.tasks.filter(t => !toRemoveProjects.includes(t.projectId));
-
-        renderApp();
-        api.triggerSave();
+        if(state.workspaces.length<=1) return alert("Keep at least one workspace.");
+        state.workspaces = state.workspaces.filter(w=>w.id !== id);
+        if(state.selectedWorkspace===id) state.selectedWorkspace = state.workspaces[0].id;
+        state.projects = state.projects.filter(p=>p.workspaceId!==id); // Clean projects
+        renderApp(); api.triggerSave();
       },
-
-      // Projects
       addProject: () => {
-        if (!state.selectedWorkspace) return;
+        if(!state.selectedWorkspace) return;
         const id = uid();
-        const proj = {
-          id,
-          name: "New Project",
-          color: "bg.green-500",
-          workspaceId: state.selectedWorkspace
-        };
-        state.projects.push(proj);
+        state.projects.push({ id, name: "New Project", color: "bg-green-500", workspaceId: state.selectedWorkspace });
         state.selectedProject = id;
-
-        const defaultColumns = [
-          { id: "task", name: "Task", isDefault: true },
-          { id: "assignee", name: "Assignee", isDefault: true },
-          { id: "priority", name: "Priority", isDefault: true },
-          { id: "status", name: "Status", isDefault: true },
-          { id: "duedate", name: "Due Date", isDefault: true }
-        ];
-
-        const g1 = uid(), g2 = uid(), g3 = uid();
-        state.groups.push(
-          { id: g1, name: "To Do", projectId: id, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g2, name: "In Progress", projectId: id, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g3, name: "Done", projectId: id, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) }
-        );
-
-        renderApp();
-        api.triggerSave();
+        // Add default group
+        const g1 = uid();
+        state.groups.push({
+           id: g1, name: "To Do", projectId: id, collapsed: false, 
+           columns: [
+            { id: "task", name: "Task", isDefault: true },
+            { id: "assignee", name: "Assignee", isDefault: true },
+            { id: "priority", name: "Priority", isDefault: true },
+            { id: "status", name: "Status", isDefault: true },
+            { id: "duedate", name: "Due Date", isDefault: true }
+           ]
+        });
+        renderApp(); api.triggerSave();
       },
-
-      selectProject: (id) => {
-        state.selectedProject = id;
-        renderApp();
-      },
-
+      selectProject: (id) => { state.selectedProject = id; renderApp(); },
       startEditProject: (id) => {
         const p = state.projects.find(pr => pr.id === id);
-        if (!p) return;
-        state.ui.editingProjectId = id;
-        state.ui.editingProjectName = p.name;
-        renderApp();
+        if (p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
       },
-
       saveProjectName: (id) => {
         const input = document.getElementById(`proj-name-input-${id}`);
         const p = state.projects.find(pr => pr.id === id);
-        if (p && input) {
-          const val = input.value.trim();
-          if (val) p.name = val;
-          api.triggerSave();
-        }
-        state.ui.editingProjectId = null;
-        state.ui.editingProjectName = "";
-        renderApp();
+        if (p && input && input.value.trim()) { p.name = input.value.trim(); api.triggerSave(); }
+        state.ui.editingProjectId = null; renderApp();
       },
-
       deleteProject: (id) => {
-        if (!confirm("Delete project?")) return;
-        state.projects = state.projects.filter(p => p.id !== id);
-        state.groups = state.groups.filter(g => g.projectId !== id);
-        state.tasks = state.tasks.filter(t => t.projectId !== id);
-
-        const nextP = state.projects.find(
-          p => p.workspaceId === state.selectedWorkspace
-        );
-        state.selectedProject = nextP ? nextP.id : (state.projects[0]?.id || null);
-
-        renderApp();
-        api.triggerSave();
+         if(!confirm("Delete Project?")) return;
+         state.projects = state.projects.filter(p=>p.id!==id);
+         state.groups = state.groups.filter(g=>g.projectId!==id);
+         state.tasks = state.tasks.filter(t=>t.projectId!==id);
+         state.selectedProject = state.projects[0]?.id || null;
+         renderApp(); api.triggerSave();
       },
-
-      // Groups
       toggleGroupCollapse: (id) => {
         const g = state.groups.find(gr => gr.id === id);
-        if (!g) return;
-        g.collapsed = !g.collapsed;
-        renderApp();
-        api.triggerSave();
+        if (g) { g.collapsed = !g.collapsed; renderApp(); api.triggerSave(); }
       },
-
       addGroup: () => {
-        if (!state.selectedProject) return;
-        const baseGroup =
-          state.groups.find(g => g.projectId === state.selectedProject) ||
-          state.groups[0];
-
-        const id = uid();
-        const newGroup = {
-          id,
-          name: "New Group",
-          projectId: state.selectedProject,
-          collapsed: false,
-          columns: baseGroup
-            ? JSON.parse(JSON.stringify(baseGroup.columns))
-            : [
-              { id: "task", name: "Task", isDefault: true },
-              { id: "assignee", name: "Assignee", isDefault: true },
-              { id: "priority", name: "Priority", isDefault: true },
-              { id: "status", name: "Status", isDefault: true },
-              { id: "duedate", name: "Due Date", isDefault: true }
-            ]
-        };
-        state.groups.push(newGroup);
-        renderApp();
-        api.triggerSave();
+        if(!state.selectedProject) return;
+        const base = state.groups.find(g=>g.projectId===state.selectedProject);
+        state.groups.push({
+          id: uid(), name: "New Group", projectId: state.selectedProject, collapsed: false,
+          columns: base ? JSON.parse(JSON.stringify(base.columns)) : []
+        });
+        renderApp(); api.triggerSave();
       },
-
       startEditGroup: (id) => {
-        const g = state.groups.find(gr => gr.id === id);
-        if (!g) return;
-        state.ui.editingGroupId = id;
-        state.ui.editingGroupName = g.name;
-        renderApp();
+         const g = state.groups.find(gr=>gr.id===id);
+         if(g) { state.ui.editingGroupId=id; state.ui.editingGroupName=g.name; renderApp(); }
       },
-
       saveGroupName: (id) => {
         const input = document.getElementById(`group-name-input-${id}`);
-        const g = state.groups.find(gr => gr.id === id);
-        if (g && input) {
-          const val = input.value.trim();
-          if (val) g.name = val;
-          api.triggerSave();
-        }
-        state.ui.editingGroupId = null;
-        state.ui.editingGroupName = "";
-        renderApp();
+        const g = state.groups.find(gr=>gr.id===id);
+        if(g && input && input.value.trim()) { g.name=input.value.trim(); api.triggerSave(); }
+        state.ui.editingGroupId=null; renderApp();
       },
-
       deleteGroup: (id) => {
-        if (!confirm("Delete group?")) return;
-        state.groups = state.groups.filter(g => g.id !== id);
-        state.tasks = state.tasks.filter(t => t.groupId !== id);
-        renderApp();
-        api.triggerSave();
+        if(!confirm("Delete group?")) return;
+        state.groups = state.groups.filter(g=>g.id!==id);
+        renderApp(); api.triggerSave();
       },
-
-      toggleColumnsPanel: (groupId) => {
-        state.ui.columnsGroupId =
-          state.ui.columnsGroupId === groupId ? null : groupId;
+      toggleColumnsPanel: (gid) => {
+        state.ui.columnsGroupId = state.ui.columnsGroupId === gid ? null : gid;
         renderApp();
       },
-
-      addColumn: (groupId) => {
-        const g = state.groups.find(gr => gr.id === groupId);
-        if (!g) return;
-        g.columns.push({
-          id: "col_" + uid(),
-          name: "New Column",
-          isDefault: false
+      addColumn: (gid) => {
+        const g = state.groups.find(gr=>gr.id===gid);
+        if(g) { g.columns.push({id:"col_"+uid(), name:"New Column", isDefault: false}); renderApp(); api.triggerSave(); }
+      },
+      deleteColumn: (gid, colId) => {
+        const g = state.groups.find(gr=>gr.id===gid);
+        if(g) { g.columns = g.columns.filter(c=>c.id!==colId); renderApp(); api.triggerSave(); }
+      },
+      setShowNewTask: (gid) => {
+        state.ui.showNewTask = gid;
+        state.ui.newTask = { name: "", assignee: null, priority: "Medium", status: "Not Started", dueDate: "", customFields: {} };
+        renderApp();
+      },
+      submitTask: (gid) => {
+        const input = document.getElementById(`new-task-name-${gid}`);
+        if(!input || !input.value.trim()) return;
+        state.tasks.push({
+          id: uid(), name: input.value.trim(), groupId: gid, projectId: state.selectedProject,
+          priority: "Medium", status: "Not Started", assignee: null, dueDate: "", customFields: {}
         });
-        renderApp();
-        api.triggerSave();
-      },
-
-      renameColumn: (groupId, colId) => {
-        const input = document.getElementById(`col-name-${groupId}-${colId}`);
-        if (!input) return;
-        const g = state.groups.find(gr => gr.id === groupId);
-        if (!g) return;
-        const col = g.columns.find(c => c.id === colId);
-        if (col) {
-          col.name = input.value.trim() || col.name;
-          renderApp();
-          api.triggerSave();
-        }
-      },
-
-      deleteColumn: (groupId, colId) => {
-        const g = state.groups.find(gr => gr.id === groupId);
-        if (!g) return;
-        g.columns = g.columns.filter(c => c.id !== colId);
-        state.tasks.forEach(t => {
-          if (t.customFields && t.customFields[colId] !== undefined) {
-            delete t.customFields[colId];
-          }
-        });
-        renderApp();
-        api.triggerSave();
-      },
-
-      // Tasks
-      setShowNewTask: (groupId) => {
-        state.ui.showNewTask = groupId;
-        state.ui.newTask = {
-          name: "",
-          assignee: null,
-          priority: "Medium",
-          status: "Not Started",
-          dueDate: "",
-          customFields: {}
-        };
-        renderApp();
-      },
-
-      submitTask: (groupId) => {
-        const input = document.getElementById(`new-task-name-${groupId}`);
-        if (!input || !input.value.trim()) return;
-        const id = uid();
-        const t = {
-          id,
-          name: input.value.trim(),
-          groupId,
-          projectId: state.selectedProject,
-          priority: state.ui.newTask.priority || "Medium",
-          status: state.ui.newTask.status || "Not Started",
-          assignee: null,
-          dueDate: "",
-          customFields: {}
-        };
-        state.tasks.push(t);
         state.ui.showNewTask = null;
-        renderApp();
-        api.triggerSave();
+        renderApp(); api.triggerSave();
       },
-
-      deleteTask: (id) => {
-        state.tasks = state.tasks.filter(t => t.id !== id);
-        renderApp();
-        api.triggerSave();
-      },
-
-      startEditTaskName: (id) => {
-        state.ui.editingTaskId = id;
-        renderApp();
-        const input = document.getElementById(`task-name-input-${id}`);
-        if (input) input.focus();
-      },
-
+      startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 10); },
       saveTaskName: (id) => {
-        const input = document.getElementById(`task-name-input-${id}`);
-        const t = state.tasks.find(task => task.id === id);
-        if (t && input) {
-          const val = input.value.trim();
-          if (val) t.name = val;
-          api.triggerSave();
-        }
-        state.ui.editingTaskId = null;
-        renderApp();
+         const input = document.getElementById(`task-name-input-${id}`);
+         const t = state.tasks.find(task=>task.id===id);
+         if(t && input && input.value.trim()) { t.name = input.value.trim(); api.triggerSave(); }
+         state.ui.editingTaskId = null; renderApp();
       },
-
-      updateTaskField: (id, field, value, extra) => {
-        const t = state.tasks.find(task => task.id === id);
-        if (!t) return;
-
-        if (field === "assignee") {
-          t.assignee = value ? { name: value } : null;
-        } else if (field === "custom") {
-          const colId = extra;
-          if (!t.customFields) t.customFields = {};
-          t.customFields[colId] = value;
-        } else {
-          t[field] = value;
-        }
-        renderApp();
-        api.triggerSave();
+      updateTaskField: (id, field, val, extra) => {
+         const t = state.tasks.find(task=>task.id===id);
+         if(!t) return;
+         if(field === "assignee") t.assignee = val ? {name:val} : null;
+         else if(field === "custom") { if(!t.customFields) t.customFields={}; t.customFields[extra] = val; }
+         else t[field] = val;
+         renderApp(); api.triggerSave();
       },
-
-      moveTaskToGroup: (id, groupId) => {
-        const t = state.tasks.find(task => task.id === id);
-        if (!t) return;
-        t.groupId = groupId;
-        renderApp();
-        api.triggerSave();
-      }
+      deleteTask: (id) => { state.tasks = state.tasks.filter(t=>t.id!==id); renderApp(); api.triggerSave(); }
     };
 
     window.actions = actions;
 
     // ==========================
-    // RENDER HELPERS
-    // (All your existing renderSidebar, renderStatusIndicator,
-    //  renderKanbanView, renderListView, renderLogin, renderApp)
+    // RENDER HELPERS (THE MISSING PART)
     // ==========================
-    // I keep them exactly as you provided before, only using the same state/actions.
 
     function renderStatusIndicator() {
       const el = document.getElementById("save-status");
       if (!el) return;
       let html = "";
-      if (state.saveStatus === "saving")
-        html =
-          '<span class="text-blue-500 flex items-center gap-1"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Saving...</span>';
-      else if (state.saveStatus === "pending")
-        html =
-          '<span class="text-yellow-500 flex items-center gap-1">Changes pending...</span>';
-      else if (state.saveStatus === "error")
-        html =
-          '<span class="text-red-500 flex items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i> Save Failed</span>';
-      else
-        html =
-          '<span class="text-green-500 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Saved</span>';
+      if (state.saveStatus === "saving") html = '<span class="text-blue-500 flex items-center gap-1"><i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> Saving...</span>';
+      else if (state.saveStatus === "error") html = '<span class="text-red-500 flex items-center gap-1"><i data-lucide="alert-circle" class="w-3 h-3"></i> Failed</span>';
+      else if (state.saveStatus === "pending") html = '<span class="text-yellow-500">...</span>';
+      else html = '<span class="text-green-500 flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Saved</span>';
       el.innerHTML = html;
       lucide.createIcons();
     }
 
-    /* ------------- 
-       renderSidebar, renderColumnsPanel, renderCellForColumn,
-       renderKanbanView, renderListView, renderLogin
-       (reuse exactly from your existing file – unchanged)
-       ------------- */
+    function renderSidebar() {
+      const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspace);
+      const wsProjects = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
 
-    // To keep this answer from being 20+ pages, I’m not repeating
-    // every render function here, but you can take them directly
-    // from your current working HTML and paste them below this comment
-    // exactly as they are. They don't touch Firebase at all.
+      return `
+        <div class="w-64 border-r dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col h-full flex-shrink-0">
+          <div class="p-4 border-b dark:border-gray-700 flex items-center justify-between">
+             <div class="flex items-center gap-2 font-bold text-gray-700 dark:text-gray-100">
+               <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                 <i data-lucide="check-square" class="w-5 h-5"></i>
+               </div>
+               WellTask
+             </div>
+             <div id="save-status" class="text-xs"></div>
+          </div>
 
-    // ... PASTE YOUR EXISTING RENDER FUNCTIONS HERE ...
+          <div class="p-3">
+             <div class="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
+             <div class="relative group">
+                ${state.ui.editingWorkspaceId === state.selectedWorkspace 
+                  ? `<div class="flex items-center gap-1">
+                       <input id="ws-name-input-${state.selectedWorkspace}" class="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700 dark:text-white" value="${state.ui.editingWorkspaceName}" />
+                       <button onclick="actions.saveWorkspaceName('${state.selectedWorkspace}')" class="p-1 text-green-600"><i data-lucide="check" class="w-4 h-4"></i></button>
+                     </div>`
+                  : `<div class="flex items-center justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded cursor-pointer" onclick="actions.startEditWorkspace('${state.selectedWorkspace}')">
+                       <span class="truncate font-medium dark:text-gray-200">${activeWs ? activeWs.name : 'Select...'}</span>
+                       <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500"></i>
+                     </div>`
+                }
+             </div>
+             
+             <div class="mt-2 space-y-1">
+               ${state.workspaces.map(w => `
+                  <div class="flex items-center justify-between text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${w.id === state.selectedWorkspace ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-600 dark:text-gray-400'}"
+                       onclick="actions.selectWorkspace('${w.id}')">
+                     <span>${w.name}</span>
+                     ${w.id === state.selectedWorkspace ? `<i data-lucide="trash-2" class="w-3 h-3 text-red-400 hover:text-red-600" onclick="event.stopPropagation(); actions.deleteWorkspace('${w.id}')"></i>` : ''}
+                  </div>
+               `).join('')}
+               <button onclick="actions.addWorkspace()" class="w-full text-left text-xs text-blue-500 hover:underline mt-1 px-2">+ New Workspace</button>
+             </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-3">
+             <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Projects</div>
+                <button onclick="actions.addProject()" class="text-gray-500 hover:text-blue-500"><i data-lucide="plus" class="w-4 h-4"></i></button>
+             </div>
+             <div class="space-y-1">
+               ${wsProjects.map(p => `
+                 <div class="group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer ${p.id === state.selectedProject ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'}"
+                      onclick="actions.selectProject('${p.id}')">
+                    <div class="flex items-center gap-2 truncate">
+                      <span class="w-2 h-2 rounded-full ${p.color || 'bg-gray-400'}"></span>
+                      ${state.ui.editingProjectId === p.id 
+                        ? `<input id="proj-name-input-${p.id}" class="w-24 px-1 py-0.5 text-xs border rounded" value="${state.ui.editingProjectName}" onclick="event.stopPropagation()" onblur="actions.saveProjectName('${p.id}')" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" />`
+                        : `<span ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`
+                      }
+                    </div>
+                    <div class="hidden group-hover:flex items-center gap-1">
+                       <i data-lucide="edit-2" class="w-3 h-3 text-gray-400 hover:text-blue-500" onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"></i>
+                       <i data-lucide="trash" class="w-3 h-3 text-gray-400 hover:text-red-500" onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"></i>
+                    </div>
+                 </div>
+               `).join('')}
+             </div>
+          </div>
+
+          <div class="p-4 border-t dark:border-gray-700 text-xs text-gray-500">
+             <div class="flex items-center gap-2 mb-2">
+               <button onclick="actions.toggleTheme()" class="flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-200">
+                 <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i>
+                 ${state.darkMode ? 'Light Mode' : 'Dark Mode'}
+               </button>
+             </div>
+             ${state.currentUser ? `<div class="truncate">👤 ${state.currentUser.name}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCellForColumn(task, col) {
+      if (col.id === 'task') {
+        return state.ui.editingTaskId === task.id
+          ? `<input id="task-name-input-${task.id}" class="w-full bg-white dark:bg-gray-700 border border-blue-400 rounded px-2 py-1" value="${task.name}" onblur="actions.saveTaskName('${task.id}')" onkeydown="if(event.key==='Enter') actions.saveTaskName('${task.id}')" />`
+          : `<span class="cursor-text hover:text-blue-600 dark:hover:text-blue-400" onclick="actions.startEditTaskName('${task.id}')">${task.name}</span>`;
+      }
+      if (col.id === 'priority') {
+        const p = task.priority || 'Medium';
+        return `
+          <select onchange="actions.updateTaskField('${task.id}', 'priority', this.value)" 
+                  class="text-xs border-0 bg-transparent rounded px-1.5 py-0.5 cursor-pointer ${priorityClass(p)}">
+            <option value="Low" ${p==='Low'?'selected':''}>Low</option>
+            <option value="Medium" ${p==='Medium'?'selected':''}>Medium</option>
+            <option value="High" ${p==='High'?'selected':''}>High</option>
+            <option value="Critical" ${p==='Critical'?'selected':''}>Critical</option>
+          </select>`;
+      }
+      if (col.id === 'status') {
+         return `
+           <select onchange="actions.updateTaskField('${task.id}', 'status', this.value)" class="bg-transparent text-xs border border-gray-200 dark:border-gray-600 rounded px-1">
+             <option value="Not Started" ${task.status==='Not Started'?'selected':''}>Not Started</option>
+             <option value="In Progress" ${task.status==='In Progress'?'selected':''}>In Progress</option>
+             <option value="Done" ${task.status==='Done'?'selected':''}>Done</option>
+             <option value="Stuck" ${task.status==='Stuck'?'selected':''}>Stuck</option>
+           </select>
+         `;
+      }
+      if (col.id === 'assignee') {
+         return `<input type="text" placeholder="Unassigned" class="bg-transparent w-full text-xs focus:outline-none" value="${task.assignee?.name || ''}" onchange="actions.updateTaskField('${task.id}', 'assignee', this.value)" />`;
+      }
+      if (col.id === 'duedate') {
+         return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate||''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
+      }
+      // Custom
+      const val = (task.customFields && task.customFields[col.id]) || "";
+      return `<input type="text" class="bg-transparent w-full text-xs focus:outline-none text-gray-600 dark:text-gray-300" value="${val}" onchange="actions.updateTaskField('${task.id}', 'custom', this.value, '${col.id}')" />`;
+    }
+
+    function renderListView() {
+      const projectGroups = state.groups.filter(g => g.projectId === state.selectedProject);
+      const activeProject = state.projects.find(p => p.id === state.selectedProject);
+      if(!activeProject) return `<div class="p-10 text-gray-400">Select a project</div>`;
+
+      return `
+        <div class="h-full flex flex-col bg-white dark:bg-gray-900">
+           <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                   <span class="w-3 h-3 rounded-full ${activeProject.color}"></span>
+                   ${activeProject.name}
+                </h1>
+                <p class="text-sm text-gray-500">List View</p>
+              </div>
+              <div class="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                 <button class="px-3 py-1 rounded shadow bg-white dark:bg-gray-700 text-xs font-medium">List</button>
+                 <button onclick="actions.setView('kanban')" class="px-3 py-1 rounded text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-medium">Kanban</button>
+              </div>
+           </div>
+
+           <div class="flex-1 overflow-y-auto p-6 space-y-8">
+              ${projectGroups.map(group => {
+                 const groupTasks = state.tasks.filter(t => t.groupId === group.id);
+                 return `
+                   <div class="mb-8">
+                      <div class="flex items-center gap-2 mb-2 group">
+                         <button onclick="actions.toggleGroupCollapse('${group.id}')" class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 transition-transform ${group.collapsed ? '-rotate-90' : ''}">
+                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                         </button>
+                         ${state.ui.editingGroupId === group.id 
+                           ? `<input id="group-name-input-${group.id}" value="${state.ui.editingGroupName}" class="border rounded px-2 py-1 text-lg font-medium dark:bg-gray-800 dark:text-white" onblur="actions.saveGroupName('${group.id}')" onkeydown="if(event.key==='Enter') actions.saveGroupName('${group.id}')" />`
+                           : `<h2 class="text-lg font-medium text-${activeProject.color.split('-')[1] || 'blue'}-600 dark:text-${activeProject.color.split('-')[1] || 'blue'}-400 cursor-pointer" ondblclick="actions.startEditGroup('${group.id}')">${group.name}</h2>`
+                         }
+                         <span class="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">${groupTasks.length} tasks</span>
+                         
+                         <div class="relative ml-auto">
+                            <button onclick="actions.toggleColumnsPanel('${group.id}')" class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-500"><i data-lucide="plus-circle" class="w-4 h-4"></i></button>
+                            ${state.ui.columnsGroupId === group.id ? renderColumnsPanel(group) : ''}
+                         </div>
+                         <button onclick="actions.deleteGroup('${group.id}')" class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                      </div>
+
+                      ${!group.collapsed ? `
+                        <div class="overflow-x-auto rounded-lg border dark:border-gray-700">
+                          <table class="w-full text-left border-collapse">
+                            <thead>
+                              <tr class="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
+                                <th class="w-8 p-2 text-center"></th>
+                                ${group.columns.map(col => `
+                                  <th class="font-normal p-2 border-r dark:border-gray-700 min-w-[150px] group/col">
+                                    <div class="flex items-center justify-between">
+                                      ${col.name}
+                                      ${!col.isDefault ? `<i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-500 opacity-0 group-hover/col:opacity-100" onclick="actions.deleteColumn('${group.id}', '${col.id}')"></i>` : ''}
+                                    </div>
+                                  </th>
+                                `).join('')}
+                                <th class="w-10"></th>
+                              </tr>
+                            </thead>
+                            <tbody class="text-sm divide-y dark:divide-gray-700 bg-white dark:bg-gray-900">
+                               ${groupTasks.map(task => `
+                                 <tr class="group/row hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                   <td class="p-2 text-center text-gray-300"><i data-lucide="grip-vertical" class="w-4 h-4"></i></td>
+                                   ${group.columns.map(col => `
+                                     <td class="p-2 border-r dark:border-gray-700 text-gray-700 dark:text-gray-200">
+                                        ${renderCellForColumn(task, col)}
+                                     </td>
+                                   `).join('')}
+                                   <td class="p-2 text-center">
+                                     <button onclick="actions.deleteTask('${task.id}')" class="opacity-0 group-hover/row:opacity-100 text-gray-400 hover:text-red-500"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                                   </td>
+                                 </tr>
+                               `).join('')}
+                               
+                               ${state.ui.showNewTask === group.id
+                                 ? `<tr class="bg-blue-50 dark:bg-blue-900/10">
+                                      <td class="p-2"></td>
+                                      <td class="p-2 border-r dark:border-gray-700">
+                                        <input id="new-task-name-${group.id}" class="w-full bg-transparent border-b border-blue-500 focus:outline-none" placeholder="Task name..." autofocus onkeydown="if(event.key==='Enter') actions.submitTask('${group.id}')" />
+                                      </td>
+                                      <td colspan="${group.columns.length}" class="p-2">
+                                        <button onclick="actions.submitTask('${group.id}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Add</button>
+                                        <button onclick="actions.setShowNewTask(null)" class="ml-2 text-gray-500 text-xs">Cancel</button>
+                                      </td>
+                                    </tr>`
+                                 : `<tr>
+                                      <td class="p-2"></td>
+                                      <td class="p-2" colspan="${group.columns.length + 1}">
+                                        <button onclick="actions.setShowNewTask('${group.id}')" class="flex items-center gap-1 text-gray-400 hover:text-blue-500 text-sm">
+                                           <i data-lucide="plus" class="w-4 h-4"></i> Add Task
+                                        </button>
+                                      </td>
+                                    </tr>`
+                               }
+                            </tbody>
+                          </table>
+                        </div>
+                      ` : ''}
+                   </div>
+                 `;
+              }).join('')}
+              <button onclick="actions.addGroup()" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2">
+                 <i data-lucide="plus" class="w-5 h-5"></i> Add New Group
+              </button>
+           </div>
+        </div>
+      `;
+    }
+
+    function renderColumnsPanel(group) {
+      return `
+        <div class="absolute right-0 top-6 w-48 bg-white dark:bg-gray-800 shadow-xl rounded-lg border dark:border-gray-700 z-10 p-2">
+           <div class="text-xs font-bold text-gray-500 mb-2">ADD COLUMNS</div>
+           <button onclick="actions.addColumn('${group.id}')" class="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-blue-500">+ Custom Text</button>
+        </div>
+      `;
+    }
+
+    function renderKanbanView() {
+      const projectGroups = state.groups.filter(g => g.projectId === state.selectedProject);
+      const activeProject = state.projects.find(p => p.id === state.selectedProject);
+      if(!activeProject) return `<div class="p-10 text-gray-400">Select a project</div>`;
+
+      // For Kanban, we treat Groups as the Columns
+      return `
+        <div class="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+           <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between bg-white dark:bg-gray-900">
+              <h1 class="text-xl font-bold text-gray-800 dark:text-white">${activeProject.name} <span class="text-sm font-normal text-gray-500">Kanban</span></h1>
+              <div class="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                 <button onclick="actions.setView('list')" class="px-3 py-1 rounded text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-medium">List</button>
+                 <button class="px-3 py-1 rounded shadow bg-white dark:bg-gray-700 text-xs font-medium">Kanban</button>
+              </div>
+           </div>
+           
+           <div class="flex-1 overflow-x-auto overflow-y-hidden p-6">
+              <div class="flex h-full gap-6">
+                 ${projectGroups.map(group => {
+                   const tasks = state.tasks.filter(t => t.groupId === group.id);
+                   return `
+                     <div class="w-80 flex flex-col h-full bg-gray-100 dark:bg-gray-800/50 rounded-xl border dark:border-gray-700">
+                        <div class="p-3 font-semibold text-gray-700 dark:text-gray-200 flex justify-between">
+                           <span>${group.name}</span>
+                           <span class="bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full">${tasks.length}</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-2 space-y-2">
+                           ${tasks.map(t => `
+                              <div class="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm border dark:border-gray-700 hover:shadow-md cursor-pointer group">
+                                 <div class="flex justify-between items-start mb-2">
+                                    <span class="text-xs px-1.5 py-0.5 rounded ${priorityClass(t.priority)}">${t.priority}</span>
+                                    <i data-lucide="more-horizontal" class="w-4 h-4 text-gray-400"></i>
+                                 </div>
+                                 <div class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">${t.name}</div>
+                                 <div class="flex items-center justify-between mt-2">
+                                    <div class="flex items-center gap-1 text-xs text-gray-500">
+                                       <i data-lucide="user" class="w-3 h-3"></i> ${t.assignee ? t.assignee.name.substring(0,6)+'...' : '-'}
+                                    </div>
+                                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <button class="p-1 hover:bg-red-100 rounded text-red-500" onclick="actions.deleteTask('${t.id}')"><i data-lucide="trash" class="w-3 h-3"></i></button>
+                                    </div>
+                                 </div>
+                              </div>
+                           `).join('')}
+                        </div>
+                        <div class="p-2">
+                           <button onclick="actions.setShowNewTask('${group.id}'); actions.setView('list')" class="w-full py-2 text-sm text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center gap-1">
+                             <i data-lucide="plus" class="w-4 h-4"></i> Add Task
+                           </button>
+                        </div>
+                     </div>
+                   `;
+                 }).join('')}
+                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-500">
+                    + Add Section
+                 </button>
+              </div>
+           </div>
+        </div>
+      `;
+    }
 
     function renderLogin() {
       return `
-        <div class="h-screen flex items-center justify-center bg-gray-100 text-xl text-gray-600">
-          Please open WellTask from Zoho Cliq.
+        <div class="h-screen flex items-center justify-center bg-gray-100 text-xl text-gray-600 font-medium">
+          <div class="text-center">
+            <p class="mb-2">🔒 Authentication Required</p>
+            <p class="text-sm text-gray-400">Please open WellTask from Zoho Cliq.</p>
+          </div>
         </div>
       `;
     }
@@ -844,16 +775,16 @@
 
         app.innerHTML = `
           <div class="flex h-screen ${bgColor} overflow-hidden font-sans relative">
-            ${state.isLoading
+            ${state.isLoading 
               ? `<div class="absolute inset-0 bg-black/20 z-50 flex items-center justify-center">
-                     <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-                 </div>`
+                   <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                 </div>` 
               : ""
             }
             ${renderSidebar()}
             <div class="flex-1 overflow-hidden">
-              ${state.currentView === "kanban"
-                ? renderKanbanView()
+              ${state.currentView === "kanban" 
+                ? renderKanbanView() 
                 : renderListView()
               }
             </div>
@@ -861,7 +792,6 @@
         `;
         renderStatusIndicator();
       }
-
       lucide.createIcons();
     }
 
