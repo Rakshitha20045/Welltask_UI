@@ -154,7 +154,10 @@
         editingProjectName: "",
         editingTaskId: null,
         editingGroupId: null,
-        editingGroupName: ""
+        editingGroupName: "",
+        // NEW: State for column editing
+        editingColumnGroupId: null,
+        editingColumnId: null
       }
     };
 
@@ -190,13 +193,12 @@
           }
 
           // 2. Try Firebase (Overwrites local if found)
-          if (!loaded || boardid) { // Always check firebase if shared board
+          if (!loaded || boardid) { 
              const docId = boardid || (state.currentUser ? state.currentUser.id : "");
              const fbData = await firebaseLoadBoard(docId);
              if (fbData) {
                applyLoadedState(fbData);
                loaded = true;
-               // Cache to local
                if(key) localStorage.setItem(key, JSON.stringify(fbData));
              }
           }
@@ -280,7 +282,6 @@
       state.currentView = parsed.currentView || "list";
       state.darkMode = !!parsed.darkMode;
       
-      // Reselect logic
       if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
       if (state.projects.length > 0) {
         const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
@@ -320,7 +321,7 @@
         if(state.workspaces.length<=1) return alert("Keep at least one workspace.");
         state.workspaces = state.workspaces.filter(w=>w.id !== id);
         if(state.selectedWorkspace===id) state.selectedWorkspace = state.workspaces[0].id;
-        state.projects = state.projects.filter(p=>p.workspaceId!==id); // Clean projects
+        state.projects = state.projects.filter(p=>p.workspaceId!==id); 
         renderApp(); api.triggerSave();
       },
       addProject: () => {
@@ -401,6 +402,35 @@
         const g = state.groups.find(gr=>gr.id===gid);
         if(g) { g.columns = g.columns.filter(c=>c.id!==colId); renderApp(); api.triggerSave(); }
       },
+      
+      // ✅ NEW: START EDIT COLUMN
+      startEditColumn: (gid, colId) => {
+        state.ui.editingColumnGroupId = gid;
+        state.ui.editingColumnId = colId;
+        renderApp();
+        // Focus the input
+        setTimeout(() => {
+            const el = document.getElementById(`col-name-input-${gid}-${colId}`);
+            if(el) el.focus();
+        }, 50);
+      },
+
+      // ✅ NEW: SAVE COLUMN NAME
+      saveColumnName: (gid, colId) => {
+        const input = document.getElementById(`col-name-input-${gid}-${colId}`);
+        const g = state.groups.find(gr=>gr.id===gid);
+        if (g && input) {
+            const col = g.columns.find(c => c.id === colId);
+            if(col && input.value.trim()){
+                col.name = input.value.trim();
+                api.triggerSave();
+            }
+        }
+        state.ui.editingColumnGroupId = null;
+        state.ui.editingColumnId = null;
+        renderApp();
+      },
+
       setShowNewTask: (gid) => {
         state.ui.showNewTask = gid;
         state.ui.newTask = { name: "", assignee: null, priority: "Medium", status: "Not Started", dueDate: "", customFields: {} };
@@ -437,7 +467,7 @@
     window.actions = actions;
 
     // ==========================
-    // RENDER HELPERS (THE MISSING PART)
+    // RENDER HELPERS
     // ==========================
 
     function renderStatusIndicator() {
@@ -467,7 +497,6 @@
              </div>
              <div id="save-status" class="text-xs"></div>
           </div>
-
           <div class="p-3">
              <div class="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
              <div class="relative group">
@@ -482,7 +511,6 @@
                      </div>`
                 }
              </div>
-             
              <div class="mt-2 space-y-1">
                ${state.workspaces.map(w => `
                   <div class="flex items-center justify-between text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${w.id === state.selectedWorkspace ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-600 dark:text-gray-400'}"
@@ -494,7 +522,6 @@
                <button onclick="actions.addWorkspace()" class="w-full text-left text-xs text-blue-500 hover:underline mt-1 px-2">+ New Workspace</button>
              </div>
           </div>
-
           <div class="flex-1 overflow-y-auto p-3">
              <div class="flex items-center justify-between mb-2">
                 <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Projects</div>
@@ -519,7 +546,6 @@
                `).join('')}
              </div>
           </div>
-
           <div class="p-4 border-t dark:border-gray-700 text-xs text-gray-500">
              <div class="flex items-center gap-2 mb-2">
                <button onclick="actions.toggleTheme()" class="flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-200">
@@ -566,7 +592,6 @@
       if (col.id === 'duedate') {
          return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate||''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
       }
-      // Custom
       const val = (task.customFields && task.customFields[col.id]) || "";
       return `<input type="text" class="bg-transparent w-full text-xs focus:outline-none text-gray-600 dark:text-gray-300" value="${val}" onchange="actions.updateTaskField('${task.id}', 'custom', this.value, '${col.id}')" />`;
     }
@@ -623,8 +648,18 @@
                                 ${group.columns.map(col => `
                                   <th class="font-normal p-2 border-r dark:border-gray-700 min-w-[150px] group/col">
                                     <div class="flex items-center justify-between">
-                                      ${col.name}
-                                      ${!col.isDefault ? `<i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-500 opacity-0 group-hover/col:opacity-100" onclick="actions.deleteColumn('${group.id}', '${col.id}')"></i>` : ''}
+                                      ${state.ui.editingColumnGroupId === group.id && state.ui.editingColumnId === col.id
+                                         ? `<input id="col-name-input-${group.id}-${col.id}" 
+                                                class="w-full bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 text-xs font-normal"
+                                                value="${col.name}" 
+                                                onblur="actions.saveColumnName('${group.id}', '${col.id}')"
+                                                onkeydown="if(event.key==='Enter') actions.saveColumnName('${group.id}', '${col.id}')"
+                                            />`
+                                         : `<span class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400" ondblclick="actions.startEditColumn('${group.id}', '${col.id}')" title="Double-click to rename">${col.name}</span>`
+                                      }
+                                      ${!col.isDefault 
+                                        ? `<i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-500 opacity-0 group-hover/col:opacity-100" onclick="actions.deleteColumn('${group.id}', '${col.id}')"></i>` 
+                                        : ''}
                                     </div>
                                   </th>
                                 `).join('')}
@@ -645,7 +680,6 @@
                                    </td>
                                  </tr>
                                `).join('')}
-                               
                                ${state.ui.showNewTask === group.id
                                  ? `<tr class="bg-blue-50 dark:bg-blue-900/10">
                                       <td class="p-2"></td>
@@ -695,7 +729,6 @@
       const activeProject = state.projects.find(p => p.id === state.selectedProject);
       if(!activeProject) return `<div class="p-10 text-gray-400">Select a project</div>`;
 
-      // For Kanban, we treat Groups as the Columns
       return `
         <div class="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
            <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between bg-white dark:bg-gray-900">
@@ -795,9 +828,6 @@
       lucide.createIcons();
     }
 
-    // ==========================
-    // BOOT
-    // ==========================
     console.log("🟢 Boot: boardid =", boardid, "currentUser =", currentUser);
     if (boardid || state.currentUser) {
       api.load();
