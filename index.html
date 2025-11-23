@@ -373,7 +373,8 @@
             body: JSON.stringify({
               action: "save",
               boardid: boardid || (state.currentUser ? state.currentUser.id : ""),
-              data_payload: JSON.stringify(payload)
+              // ✅ FIX: Send payload as object, not double-stringified string
+              data_payload: payload 
             })
           });
 
