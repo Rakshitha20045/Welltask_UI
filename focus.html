@@ -8,16 +8,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* BASE VARIABLES */
         :root {
-            /* Default: Mindful Teal */
             --bg-work: #2a9d8f;
-            --bg-short: #457b9d; 
-            --bg-long: #6d597a; 
-            
-            --bg-current: var(--bg-work); /* Dynamic */
-            
-            --card-dark: #1e293b; 
+            --bg-short: #457b9d;
+            --bg-long: #6d597a;
+            --bg-current: var(--bg-work);
+            --card-dark: #1e293b;
             --text-white: #ffffff;
             --text-muted: #94a3b8;
             --radius-main: 6px;
@@ -37,7 +33,6 @@
             flex-direction: column;
         }
 
-        /* 1. HEADER (Clean) */
         .app-header {
             max-width: 620px;
             margin: 0 auto;
@@ -71,7 +66,6 @@
         }
         .header-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
-        /* 2. MAIN TIMER CARD */
         .main-container {
             flex: 1;
             display: flex;
@@ -137,13 +131,14 @@
         }
         .start-btn:active { transform: translateY(4px); box-shadow: none; }
 
-        /* TASK SELECTOR (Main Screen) */
-        .current-task-section {
-            width: 100%;
-            text-align: center;
+        .current-task-section { width: 100%; text-align: center; }
+        .task-label {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
-        .task-label { font-size: 14px; opacity: 0.8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        
         .main-task-select {
             width: 100%;
             background: rgba(0,0,0,0.15);
@@ -155,19 +150,25 @@
             outline: none;
             cursor: pointer;
             text-align: center;
-            appearance: none; /* Hide default arrow for cleaner look */
+            appearance: none;
             font-weight: 600;
         }
-        .main-task-select:hover { background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.6); }
-        .main-task-select option { background: var(--card-dark); color: white; text-align: left; }
+        .main-task-select:hover {
+            background: rgba(0,0,0,0.2);
+            border-color: rgba(255,255,255,0.6);
+        }
+        .main-task-select option {
+            background: var(--card-dark);
+            color: white;
+            text-align: left;
+        }
 
-        /* 3. SETTINGS MODAL */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.6);
             backdrop-filter: blur(4px);
-            display: none; 
+            display: none;
             justify-content: center;
             align-items: flex-start;
             z-index: 1000;
@@ -182,15 +183,26 @@
             margin-top: 40px;
             animation: slideDown 0.3s ease;
         }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
 
         .modal-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 15px; color: #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            color: #ddd;
         }
-        .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            font-size: 24px;
+            cursor: pointer;
+        }
 
-        /* Dark Cards */
         .dark-card {
             background: var(--card-dark);
             border-radius: var(--radius-card);
@@ -200,547 +212,638 @@
             border: 1px solid rgba(255,255,255,0.05);
         }
         .card-title {
-            font-size: 14px; font-weight: 700; color: #94a3b8; 
-            margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase;
+            font-size: 14px;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
         }
 
-        /* Inputs */
-        label { display: block; font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
+        label {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 700;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
         select, input[type="number"] {
-            width: 100%; background: #0f172a; border: 1px solid #334155;
-            padding: 10px; border-radius: 6px; color: white; font-size: 14px; outline: none;
+            width: 100%;
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 10px;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            outline: none;
         }
         input[type="range"] { width: 100%; accent-color: var(--bg-current); }
 
-        .row-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .row-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
 
-        /* THEME SWATCHES */
-        .theme-row { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
-        .theme-swatch { width: 40px; height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
+        .theme-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        .theme-swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
         .theme-swatch:hover { transform: scale(1.1); }
-        .theme-swatch.selected { border-color: white; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        .theme-swatch.selected {
+            border-color: white;
+            box-shadow: 0 0 10px rgba(255,255,255,0.3);
+        }
 
-        /* TOGGLES */
-        .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
         .toggle-row:last-child { border: none; }
         .toggle-label { font-size: 14px; color: #cbd5e1; }
+
         .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; inset: 0; background-color: #334155; border-radius: 34px; transition: .4s; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background-color: #334155;
+            border-radius: 34px;
+            transition: .4s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
         input:checked + .slider { background-color: var(--bg-current); }
         input:checked + .slider:before { transform: translateX(18px); }
 
-        /* Stats Grid */
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-        .stat-box { background: #0f172a; padding: 12px; border-radius: 6px; text-align: center; }
-        .stat-val { font-size: 20px; font-weight: 700; color: white; }
-        .stat-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; margin-top: 4px; }
-
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+        .stat-box {
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .stat-val {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+        }
+        .stat-lbl {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
 
-    <header class="app-header">
-        <div class="logo">Focus Hub</div>
-        <div style="display: flex; gap: 10px;">
-            <div style="background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
-                <span style="width: 6px; height: 6px; background: #4ade80; border-radius: 50%;"></span>
-                <span id="userLabel">Guest</span>
-            </div>
-            <button class="header-btn" id="openSettingsBtn">⚙️ Setting</button>
+<header class="app-header">
+    <div class="logo">Focus Hub</div>
+    <div style="display:flex; gap:10px;">
+        <div style="background:rgba(0,0,0,0.2); padding:4px 10px; border-radius:20px; font-size:12px; display:flex; align-items:center; gap:6px;">
+            <span style="width:6px;height:6px;background:#4ade80;border-radius:50%;"></span>
+            <span id="userLabel">Guest</span>
         </div>
-    </header>
+        <button class="header-btn" id="openSettingsBtn">⚙️ Setting</button>
+    </div>
+</header>
 
-    <div class="main-container">
-        <div class="timer-box">
-            <div class="timer-tabs">
-                <button class="tab-btn active" data-mode="work">Pomodoro</button>
-                <button class="tab-btn" data-mode="short">Short Break</button>
-                <button class="tab-btn" data-mode="long">Long Break</button>
-            </div>
-
-            <div class="time-big" id="timeDisplay">25:00</div>
-
-            <button class="start-btn" id="startBtn">START</button>
+<div class="main-container">
+    <div class="timer-box">
+        <div class="timer-tabs">
+            <button class="tab-btn active" data-mode="work">Pomodoro</button>
+            <button class="tab-btn" data-mode="short">Short Break</button>
+            <button class="tab-btn" data-mode="long">Long Break</button>
         </div>
-        
-        <div class="current-task-section">
-            <div class="task-label">CURRENTLY FOCUSING ON</div>
-            <select class="main-task-select" id="focusTaskSelect">
-                <option value="">(No Task Selected)</option>
-                <option value="" disabled>Loading tasks...</option>
-            </select>
-        </div>
+
+        <div class="time-big" id="timeDisplay">25:00</div>
+
+        <button class="start-btn" id="startBtn">START</button>
     </div>
 
-    <div class="modal-overlay" id="settingsModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>SETTINGS</h3>
-                <button class="close-btn" id="closeSettingsBtn">✕</button>
-            </div>
+    <div class="current-task-section">
+        <div class="task-label">Currently Focusing On</div>
+        <select class="main-task-select" id="focusTaskSelect">
+            <option value="">(No Task Selected)</option>
+            <option value="" disabled>Loading tasks...</option>
+        </select>
+    </div>
+</div>
 
-            <div class="dark-card">
-                <div class="card-title">⏱ Durations (Minutes)</div>
-                <div class="row-inputs">
-                    <div><label>Focus</label><input type="number" id="workDuration" value="25" min="1"></div>
-                    <div><label>Short</label><input type="number" id="shortDuration" value="5" min="1"></div>
-                    <div><label>Long</label><input type="number" id="longDuration" value="15" min="1"></div>
-                </div>
-            </div>
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>SETTINGS</h3>
+            <button class="close-btn" id="closeSettingsBtn">✕</button>
+        </div>
 
-            <div class="dark-card">
-                <div class="card-title">🔊 Sound</div>
-                <div class="input-group" style="margin-bottom:12px;">
-                    <label>Alarm Sound</label>
-                    <div style="display:flex; gap:8px;">
-                        <select id="alarmSoundType">
-                            <option value="bell">Bell</option>
-                            <option value="digital">Digital</option>
-                            <option value="wood">Woodblock</option>
-                        </select>
-                        <button id="testSoundBtn" style="background:#334155; border:none; color:white; border-radius:4px; padding:0 10px; cursor:pointer;">▶</button>
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label>Volume</label>
-                    <input type="range" id="volumeSlider" min="0" max="100" value="50">
-                </div>
-                <div class="toggle-row" style="margin-top:10px;">
-                    <span class="toggle-label">Ticking Sound</span>
-                    <label class="switch">
-                        <input type="checkbox" id="tickToggle">
-                        <span class="slider"></span>
-                    </label>
+        <div class="dark-card">
+            <div class="card-title">⏱ Durations (Minutes)</div>
+            <div class="row-inputs">
+                <div><label>Focus</label><input type="number" id="workDuration" value="25" min="1"></div>
+                <div><label>Short</label><input type="number" id="shortDuration" value="5" min="1"></div>
+                <div><label>Long</label><input type="number" id="longDuration" value="15" min="1"></div>
+            </div>
+        </div>
+
+        <div class="dark-card">
+            <div class="card-title">🔊 Sound</div>
+            <div class="input-group" style="margin-bottom:12px;">
+                <label>Alarm Sound</label>
+                <div style="display:flex; gap:8px;">
+                    <select id="alarmSoundType">
+                        <option value="bell">Bell</option>
+                        <option value="digital">Digital</option>
+                        <option value="wood">Woodblock</option>
+                    </select>
+                    <button id="testSoundBtn" style="background:#334155;border:none;color:white;border-radius:4px;padding:0 10px;cursor:pointer;">▶</button>
                 </div>
             </div>
-
-            <div class="dark-card">
-                <div class="card-title">🎨 Color Themes</div>
-                <div class="theme-row">
-                    <div class="theme-swatch selected" style="background:#2a9d8f;" data-theme="teal" title="Mindful Teal"></div>
-                    <div class="theme-swatch" style="background:#db524d;" data-theme="red" title="Classic Red"></div>
-                    <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue" title="Ocean Blue"></div>
-                    <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple" title="Creative Purple"></div>
-                </div>
+            <div class="input-group">
+                <label>Volume</label>
+                <input type="range" id="volumeSlider" min="0" max="100" value="50">
             </div>
-
-            <div class="dark-card">
-                <div class="card-title">🌱 Wellness & Auto</div>
-                <div class="toggle-row">
-                    <span class="toggle-label">Hydration</span>
-                    <label class="switch"><input type="checkbox" id="waterToggle"><span class="slider"></span></label>
-                </div>
-                <div class="toggle-row">
-                    <span class="toggle-label">Stretch</span>
-                    <label class="switch"><input type="checkbox" id="stretchToggle"><span class="slider"></span></label>
-                </div>
-                <div class="toggle-row">
-                    <span class="toggle-label">Auto-start Timer</span>
-                    <label class="switch"><input type="checkbox" id="autoSwitchToggle" checked><span class="slider"></span></label>
-                </div>
+            <div class="toggle-row" style="margin-top:10px;">
+                <span class="toggle-label">Ticking Sound</span>
+                <label class="switch">
+                    <input type="checkbox" id="tickToggle">
+                    <span class="slider"></span>
+                </label>
             </div>
+        </div>
 
-            <div class="dark-card">
-                <div class="card-title">📊 Progress Today</div>
-                <div class="stats-grid">
-                    <div class="stat-box"><div class="stat-val" id="statPomosToday">0</div><div class="stat-lbl">Pomos</div></div>
-                    <div class="stat-box"><div class="stat-val" id="statFocusMinutes">0</div><div class="stat-lbl">Mins</div></div>
-                    <div class="stat-box"><div class="stat-val" id="statBreaks">0</div><div class="stat-lbl">Breaks</div></div>
-                </div>
+        <div class="dark-card">
+            <div class="card-title">🎨 Color Themes</div>
+            <div class="theme-row">
+                <div class="theme-swatch selected" style="background:#2a9d8f;" data-theme="teal" title="Mindful Teal"></div>
+                <div class="theme-swatch" style="background:#db524d;" data-theme="red" title="Classic Red"></div>
+                <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue" title="Ocean Blue"></div>
+                <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple" title="Creative Purple"></div>
             </div>
+        </div>
 
+        <div class="dark-card">
+            <div class="card-title">🌱 Wellness & Auto</div>
+            <div class="toggle-row">
+                <span class="toggle-label">Hydration</span>
+                <label class="switch"><input type="checkbox" id="waterToggle"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+                <span class="toggle-label">Stretch</span>
+                <label class="switch"><input type="checkbox" id="stretchToggle"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-row">
+                <span class="toggle-label">Auto-start Timer</span>
+                <label class="switch"><input type="checkbox" id="autoSwitchToggle" checked><span class="slider"></span></label>
+            </div>
+        </div>
+
+        <div class="dark-card">
+            <div class="card-title">📊 Progress Today</div>
+            <div class="stats-grid">
+                <div class="stat-box"><div class="stat-val" id="statPomosToday">0</div><div class="stat-lbl">Pomos</div></div>
+                <div class="stat-box"><div class="stat-val" id="statFocusMinutes">0</div><div class="stat-lbl">Mins</div></div>
+                <div class="stat-box"><div class="stat-val" id="statBreaks">0</div><div class="stat-lbl">Breaks</div></div>
+            </div>
         </div>
     </div>
+</div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, runTransaction, increment } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import {
+        getFirestore,
+        doc,
+        getDoc,
+        setDoc,
+        updateDoc,
+        runTransaction,
+        increment
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
-            authDomain: "welltask-8bbcf.firebaseapp.com",
-            projectId: "welltask-8bbcf",
-            storageBucket: "welltask-8bbcf.firebasestorage.app",
-            messagingSenderId: "533119656804",
-            appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
-            measurementId: "G-3HD74YPC52"
-        };
+    const firebaseConfig = {
+        apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
+        authDomain: "welltask-8bbcf.firebaseapp.com",
+        projectId: "welltask-8bbcf",
+        storageBucket: "welltask-8bbcf.firebasestorage.app",
+        messagingSenderId: "533119656804",
+        appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
+        measurementId: "G-3HD74YPC52"
+    };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
 
-        // --- VARS ---
-        const params = new URLSearchParams(window.location.search);
-        const userId = params.get("userId") || "demo-user";
-        const boardId = params.get("boardId") || userId; // personal board id for this user
+    const params   = new URLSearchParams(window.location.search);
+    const userId   = params.get("userId")   || "demo-user";
+    const userName = params.get("userName") || "User";
+    const boardId  = params.get("boardId")  || userId;   // fallback = personal board
 
-        document.getElementById("userLabel").textContent = params.get("userName") || "User";
+    document.getElementById("userLabel").textContent = userName;
 
-        console.log("[FocusHub] Boot:", { userId, boardId });
+    console.log("[FocusHub] init params =>", { userId, userName, boardId });
 
-        let currentMode = "work"; 
-        let remainingSeconds = 25 * 60;
-        let timerInterval = null;
-        let tickInterval = null;
-        let userStatsDocCache = null;
-        let durations = { work: 25, short: 5, long: 15 };
-        
-        // Themes Config
-        const themes = {
-            teal: { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
-            red:  { work: '#db524d', short: '#4c9195', long: '#457ca3' },
-            blue: { work: '#3b82f6', short: '#0ea5e9', long: '#6366f1' },
-            purple:{ work: '#8b5cf6', short: '#a855f7', long: '#d946ef' }
-        };
-        let activeTheme = 'teal'; // Default
+    let currentMode = "work";
+    let remainingSeconds = 25 * 60;
+    let timerInterval = null;
+    let tickInterval  = null;
+    let userStatsDocCache = null;
+    let durations = { work: 25, short: 5, long: 15 };
 
-        // --- DOM ---
-        const root = document.documentElement;
-        const timeDisplay = document.getElementById("timeDisplay");
-        const startBtn = document.getElementById("startBtn");
-        const taskSelect = document.getElementById("focusTaskSelect");
-        
-        // --- SOUND ENGINE ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        function getVolume() { return document.getElementById("volumeSlider").value / 100; }
+    const themes = {
+        teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
+        red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
+        blue:   { work: '#3b82f6', short: '#0ea5e9', long: '#6366f1' },
+        purple: { work: '#8b5cf6', short: '#a855f7', long: '#d946ef' }
+    };
+    let activeTheme = "teal";
 
-        function playSound(type) {
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            const vol = getVolume();
-            if(vol <= 0.01) return;
+    const root        = document.documentElement;
+    const timeDisplay = document.getElementById("timeDisplay");
+    const startBtn    = document.getElementById("startBtn");
+    const taskSelect  = document.getElementById("focusTaskSelect");
 
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-            const now = audioCtx.currentTime;
+    function getVolume() {
+        return document.getElementById("volumeSlider").value / 100;
+    }
 
-            if (type === 'bell') {
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(523.25, now); // C5
-                gain.gain.setValueAtTime(vol, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
-                osc.start(now);
-                osc.stop(now + 1.5);
-            } 
-            else if (type === 'digital') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(880, now);
-                osc.frequency.setValueAtTime(1760, now + 0.1);
-                gain.gain.setValueAtTime(vol * 0.1, now);
-                gain.gain.linearRampToValueAtTime(0, now + 0.2);
-                osc.start(now);
-                osc.stop(now + 0.2);
+    function playSound(type) {
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const vol = getVolume();
+        if (vol <= 0.01) return;
+
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+
+        if (type === "bell") {
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(523.25, now);
+            gain.gain.setValueAtTime(vol, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
+            osc.start(now);
+            osc.stop(now + 1.5);
+        } else if (type === "digital") {
+            osc.type = "square";
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(1760, now + 0.1);
+            gain.gain.setValueAtTime(vol * 0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === "wood") {
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(800, now);
+            gain.gain.setValueAtTime(vol, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+    }
+
+    function startTicking() {
+        if (tickInterval) clearInterval(tickInterval);
+        if (!document.getElementById("tickToggle").checked) return;
+
+        tickInterval = setInterval(() => {
+            const vol = getVolume() * 0.3;
+            if (vol > 0.01) {
+                const osc  = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = "square";
+                osc.frequency.value = 1000;
+                gain.gain.setValueAtTime(vol * 0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.03);
             }
-            else if (type === 'wood') {
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(800, now);
-                gain.gain.setValueAtTime(vol, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-                osc.start(now);
-                osc.stop(now + 0.1);
-            }
+        }, 1000);
+    }
+
+    function stopTicking() {
+        if (tickInterval) clearInterval(tickInterval);
+        tickInterval = null;
+    }
+
+    document.getElementById("testSoundBtn").onclick = () => {
+        playSound(document.getElementById("alarmSoundType").value);
+    };
+
+    async function init() {
+        updateTimeDisplay();
+        await loadUserStats();
+        await loadBoardTasksIntoDropdown();
+        applyTheme(activeTheme);
+    }
+
+    function applyTheme(name) {
+        activeTheme = name;
+        const t = themes[name];
+        root.style.setProperty("--bg-work",  t.work);
+        root.style.setProperty("--bg-short", t.short);
+        root.style.setProperty("--bg-long",  t.long);
+        updateModeColors();
+
+        document.querySelectorAll(".theme-swatch").forEach(el => {
+            el.classList.toggle("selected", el.dataset.theme === name);
+        });
+    }
+
+    document.querySelectorAll(".theme-swatch").forEach(swatch => {
+        swatch.onclick = () => applyTheme(swatch.dataset.theme);
+    });
+
+    function updateModeColors() {
+        let color = "var(--bg-work)";
+        if (currentMode === "short") color = "var(--bg-short)";
+        if (currentMode === "long")  color = "var(--bg-long)";
+        root.style.setProperty("--bg-current", color);
+    }
+
+    function switchMode(mode) {
+        currentMode = mode;
+        remainingSeconds = durations[mode] * 60;
+        updateModeColors();
+        document.querySelectorAll(".tab-btn").forEach(btn =>
+            btn.classList.toggle("active", btn.dataset.mode === mode)
+        );
+        stopTimer();
+        updateTimeDisplay();
+    }
+
+    function updateTimeDisplay() {
+        const m = Math.floor(remainingSeconds / 60);
+        const s = remainingSeconds % 60;
+        timeDisplay.textContent =
+            `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        document.title =
+            `${timeDisplay.textContent} - ${currentMode === "work" ? "Focus" : "Break"}`;
+    }
+
+    function startTimer() {
+        if (timerInterval) {
+            stopTimer();
+            return;
         }
+        startBtn.textContent = "PAUSE";
+        startBtn.style.boxShadow = "none";
+        startBtn.style.transform = "translateY(4px)";
 
-        function startTicking() {
-            if(tickInterval) clearInterval(tickInterval);
-            if(!document.getElementById("tickToggle").checked) return;
-            
-            tickInterval = setInterval(() => {
-                const vol = getVolume() * 0.3; // Ticking is quieter
-                if(vol > 0.01) {
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    osc.type = 'square'; // Click sound
-                    osc.frequency.value = 1000;
-                    gain.gain.setValueAtTime(vol * 0.05, audioCtx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 0.03);
-                }
-            }, 1000);
-        }
+        if (document.getElementById("tickToggle").checked) startTicking();
 
-        function stopTicking() {
-            if(tickInterval) clearInterval(tickInterval);
-            tickInterval = null;
-        }
-
-        document.getElementById("testSoundBtn").onclick = () => {
-            playSound(document.getElementById("alarmSoundType").value);
-        };
-
-        // --- INIT ---
-        async function init() {
-            console.log("[FocusHub] init()");
+        timerInterval = setInterval(() => {
+            remainingSeconds--;
             updateTimeDisplay();
-            loadUserStats();
-            loadUserTasks();
-            applyTheme(activeTheme);
+            if (remainingSeconds <= 0) completeTimer();
+        }, 1000);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        stopTicking();
+        startBtn.textContent = "START";
+        startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
+        startBtn.style.transform = "translateY(0)";
+    }
+
+    async function completeTimer() {
+        stopTimer();
+        playSound(document.getElementById("alarmSoundType").value);
+
+        if (currentMode === "work") {
+            const mins = durations.work;
+            await updateStats(mins);
+            const tid = taskSelect.value;
+            if (tid) await updateTaskStats(tid, mins);
+        } else {
+            await updateBreakStats();
         }
 
-        // --- THEME LOGIC ---
-        function applyTheme(name) {
-            activeTheme = name;
-            const t = themes[name];
-            root.style.setProperty('--bg-work', t.work);
-            root.style.setProperty('--bg-short', t.short);
-            root.style.setProperty('--bg-long', t.long);
-            updateModeColors();
-            
-            // UI Update
-            document.querySelectorAll('.theme-swatch').forEach(el => {
-                el.classList.toggle('selected', el.dataset.theme === name);
+        if (document.getElementById("autoSwitchToggle").checked) {
+            const next = currentMode === "work" ? "short" : "work";
+            switchMode(next);
+            startTimer();
+        }
+    }
+
+    async function loadUserStats() {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const ref = doc(db, "users", userId);
+            let snap = await getDoc(ref);
+
+            if (!snap.exists()) {
+                await setDoc(ref, { today_date: today });
+                snap = await getDoc(ref);
+            }
+
+            let data = snap.data();
+            if (data.today_date !== today) {
+                await updateDoc(ref, {
+                    today_date: today,
+                    today_pomodoros: 0,
+                    today_focus_minutes: 0,
+                    breaks_today: 0
+                });
+                data = {
+                    ...data,
+                    today_pomodoros: 0,
+                    today_focus_minutes: 0,
+                    breaks_today: 0
+                };
+            }
+
+            userStatsDocCache = ref;
+            document.getElementById("statPomosToday").textContent =
+                data.today_pomodoros || 0;
+            document.getElementById("statFocusMinutes").textContent =
+                data.today_focus_minutes || 0;
+            document.getElementById("statBreaks").textContent =
+                data.breaks_today || 0;
+
+            document.getElementById("waterToggle").checked   = !!data.water_reminder;
+            document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
+        } catch (err) {
+            console.error("[FocusHub] Error loading user stats:", err);
+        }
+    }
+
+    async function loadBoardTasksIntoDropdown() {
+        try {
+            console.log("[FocusHub] Loading board:", boardId);
+            const boardRef = doc(db, "boards", boardId);
+            const snap = await getDoc(boardRef);
+
+            if (!snap.exists()) {
+                console.warn("[FocusHub] Board not found:", boardId);
+                taskSelect.innerHTML =
+                    '<option value="">(No Task Selected)</option>' +
+                    '<option value="" disabled>No board data found</option>';
+                return;
+            }
+
+            const board = snap.data();
+            console.log("[FocusHub] Board data:", board);
+
+            const projects   = Array.isArray(board.projects)   ? board.projects   : [];
+            const workspaces = Array.isArray(board.workspaces) ? board.workspaces : [];
+            const tasks      = Array.isArray(board.tasks)      ? board.tasks      : [];
+
+            const projectById = {};
+            projects.forEach(p => { projectById[p.id] = p; });
+
+            const workspaceById = {};
+            workspaces.forEach(w => { workspaceById[w.id] = w; });
+
+            console.log("[FocusHub] projects:", projects);
+            console.log("[FocusHub] workspaces:", workspaces);
+            console.log("[FocusHub] tasks:", tasks);
+
+            // show all tasks except status = Done
+            const openTasks = tasks.filter(t =>
+                (t.status || "").toLowerCase() !== "done"
+            );
+            console.log("[FocusHub] openTasks:", openTasks);
+
+            taskSelect.innerHTML = "";
+            const baseOpt = document.createElement("option");
+            baseOpt.value = "";
+            baseOpt.textContent = "(No Task Selected)";
+            taskSelect.appendChild(baseOpt);
+
+            if (openTasks.length === 0) {
+                const opt = document.createElement("option");
+                opt.value = "";
+                opt.disabled = true;
+                opt.textContent = "No open tasks on this board";
+                taskSelect.appendChild(opt);
+                return;
+            }
+
+            openTasks.forEach(t => {
+                const project   = projectById[t.projectId];
+                const workspace = project ? workspaceById[project.workspaceId] : null;
+
+                const projectName   = project ? project.name   : "Unknown project";
+                const workspaceName = workspace ? workspace.name : "Unknown workspace";
+
+                const opt = document.createElement("option");
+                opt.value = t.id;
+                opt.textContent =
+                    `${t.name} - ${workspaceName} - ${projectName}`;
+                taskSelect.appendChild(opt);
             });
+        } catch (err) {
+            console.error("[FocusHub] Error loading tasks from board:", err);
+            taskSelect.innerHTML =
+                '<option value="">(No Task Selected)</option>' +
+                '<option value="" disabled>Error loading tasks</option>';
         }
+    }
 
-        document.querySelectorAll('.theme-swatch').forEach(swatch => {
-            swatch.onclick = () => applyTheme(swatch.dataset.theme);
-        });
-
-        function updateModeColors() {
-            let color = 'var(--bg-work)';
-            if(currentMode === 'short') color = 'var(--bg-short)';
-            if(currentMode === 'long') color = 'var(--bg-long)';
-            root.style.setProperty('--bg-current', color);
+    async function updateStats(mins) {
+        try {
+            if (!userStatsDocCache) return;
+            await updateDoc(userStatsDocCache, {
+                today_pomodoros: increment(1),
+                today_focus_minutes: increment(mins)
+            });
+        } catch (err) {
+            console.error("[FocusHub] Error updating stats:", err);
         }
+    }
 
-        // --- TIMER LOGIC ---
-        function switchMode(mode) {
-            currentMode = mode;
-            remainingSeconds = durations[mode] * 60;
-            updateModeColors();
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
-            stopTimer();
-            updateTimeDisplay();
+    async function updateBreakStats() {
+        try {
+            if (!userStatsDocCache) return;
+            await updateDoc(userStatsDocCache, {
+                breaks_today: increment(1)
+            });
+        } catch (err) {
+            console.error("[FocusHub] Error updating break stats:", err);
         }
+    }
 
-        function updateTimeDisplay() {
-            const m = Math.floor(remainingSeconds / 60);
-            const s = remainingSeconds % 60;
-            timeDisplay.textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-            document.title = `${timeDisplay.textContent} - ${currentMode==='work'?'Focus':'Break'}`;
+    async function updateTaskStats(tid, mins) {
+        try {
+            // optional – only if you still keep separate "tasks" collection
+            const ref = doc(db, "tasks", tid);
+            await runTransaction(db, async tx => {
+                const s = await tx.get(ref);
+                if (s.exists()) {
+                    const d = s.data();
+                    tx.update(ref, {
+                        pomodoro_count: (d.pomodoro_count || 0) + 1,
+                        focus_minutes:  (d.focus_minutes  || 0) + mins
+                    });
+                }
+            });
+        } catch (err) {
+            console.warn("[FocusHub] Could not update stats in tasks collection:", err);
         }
+    }
 
-        function startTimer() {
-            if (timerInterval) { stopTimer(); return; }
-            startBtn.textContent = "PAUSE";
-            startBtn.style.boxShadow = "none";
-            startBtn.style.transform = "translateY(4px)";
-            
-            if(document.getElementById("tickToggle").checked) startTicking();
+    startBtn.onclick = startTimer;
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.onclick = () => switchMode(btn.dataset.mode);
+    });
 
-            timerInterval = setInterval(() => {
-                remainingSeconds--;
+    ["work", "short", "long"].forEach(t => {
+        const inp = document.getElementById(`${t}Duration`);
+        inp.onchange = () => {
+            durations[t] = Number(inp.value);
+            if (!timerInterval && currentMode === t) {
+                remainingSeconds = durations[t] * 60;
                 updateTimeDisplay();
-                if (remainingSeconds <= 0) completeTimer();
-            }, 1000);
-        }
-
-        function stopTimer() {
-            clearInterval(timerInterval);
-            timerInterval = null;
-            stopTicking();
-            startBtn.textContent = "START";
-            startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
-            startBtn.style.transform = "translateY(0)";
-        }
-
-        async function completeTimer() {
-            stopTimer();
-            // Play Alarm
-            playSound(document.getElementById("alarmSoundType").value);
-
-            if (currentMode === 'work') {
-                const mins = durations.work;
-                updateStats(mins);
-                const tid = taskSelect.value;
-                if (tid) updateTaskStats(tid, mins);
-            } else {
-                updateBreakStats();
             }
+        };
+    });
 
-            if (document.getElementById("autoSwitchToggle").checked) {
-                const next = currentMode === 'work' ? 'short' : 'work';
-                switchMode(next);
-                startTimer();
-            }
-        }
+    const modal = document.getElementById("settingsModal");
+    document.getElementById("openSettingsBtn").onclick  = () => modal.classList.add("open");
+    document.getElementById("closeSettingsBtn").onclick = () => modal.classList.remove("open");
+    modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("open"); };
 
-        // --- FIREBASE: USER STATS ---
-        async function loadUserStats() {
-            try {
-                const today = new Date().toISOString().slice(0, 10);
-                const ref = doc(db, "users", userId);
-                let snap = await getDoc(ref);
-                
-                if (!snap.exists()) {
-                    await setDoc(ref, { today_date: today });
-                    snap = await getDoc(ref);
-                }
-                
-                let data = snap.data();
-                if (data.today_date !== today) {
-                    await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
-                    data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
-                }
-                
-                userStatsDocCache = ref;
-                document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
-                document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
-                document.getElementById("statBreaks").textContent = data.breaks_today || 0;
-                
-                // Load Toggles
-                document.getElementById("waterToggle").checked = !!data.water_reminder;
-                document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
-            } catch (err) {
-                console.error("[FocusHub] loadUserStats error:", err);
-            }
-        }
-
-        // --- FIREBASE: TASKS FROM boards/{boardId}.tasks[] ---
-        async function loadUserTasks() {
-            try {
-                console.log("[FocusHub] loadUserTasks start", { userId, boardId });
-
-                taskSelect.innerHTML = `
-                    <option value="">(No Task Selected)</option>
-                    <option value="" disabled>Loading tasks...</option>
-                `;
-
-                const boardRef = doc(db, "boards", boardId);
-                const snap = await getDoc(boardRef);
-
-                if (!snap.exists()) {
-                    console.warn("[FocusHub] Board doc not found for boardId:", boardId);
-                    taskSelect.innerHTML = `
-                        <option value="">(No Task Selected)</option>
-                        <option value="" disabled>No board/tasks found</option>
-                    `;
-                    return;
-                }
-
-                const data = snap.data();
-                console.log("[FocusHub] Board doc loaded", {
-                    hasTasks: Array.isArray(data.tasks),
-                    hasProjects: Array.isArray(data.projects),
-                    hasWorkspaces: Array.isArray(data.workspaces)
-                });
-
-                const tasks = Array.isArray(data.tasks) ? data.tasks : [];
-                const projects = Array.isArray(data.projects) ? data.projects : [];
-                const workspaces = Array.isArray(data.workspaces) ? data.workspaces : [];
-
-                console.log("[FocusHub] counts", {
-                    totalTasks: tasks.length,
-                    totalProjects: projects.length,
-                    totalWorkspaces: workspaces.length
-                });
-
-                // filter tasks where assignee.zoho_id == userId
-                const myTasks = tasks.filter(t =>
-                    t.assignee &&
-                    (t.assignee.zoho_id === userId || t.assignee.zoho_id === String(userId))
-                );
-
-                console.log("[FocusHub] tasks assigned to user", {
-                    userId,
-                    matchedTasks: myTasks.length
-                });
-
-                taskSelect.innerHTML = '<option value="">(No Task Selected)</option>';
-
-                if (myTasks.length === 0) {
-                    const opt = document.createElement("option");
-                    opt.value = "";
-                    opt.disabled = true;
-                    opt.textContent = "No tasks found for you on this board";
-                    taskSelect.appendChild(opt);
-                    return;
-                }
-
-                function getWorkspaceNameForTask(task) {
-                    const proj = projects.find(p => p.id === task.projectId);
-                    if (!proj) return "";
-                    const ws = workspaces.find(w => w.id === proj.workspaceId);
-                    return (ws && ws.name) || proj.name || "";
-                }
-
-                myTasks.forEach(task => {
-                    const wsName = getWorkspaceNameForTask(task);
-                    const title = (task.name || "Untitled task").toString().trim();
-                    const label = wsName ? `${title} – ${wsName}` : title;
-
-                    const opt = document.createElement("option");
-                    opt.value = task.id;       // board task id
-                    opt.textContent = label;   // "Task – Workspace"
-                    taskSelect.appendChild(opt);
-                });
-
-            } catch (err) {
-                console.error("[FocusHub] Error loading tasks:", err);
-                taskSelect.innerHTML = `
-                    <option value="">(No Task Selected)</option>
-                    <option value="" disabled>Failed to load tasks</option>
-                `;
-            }
-        }
-
-        async function updateStats(mins) {
-            try {
-                if(!userStatsDocCache) return;
-                await updateDoc(userStatsDocCache, {
-                    today_pomodoros: increment(1),
-                    today_focus_minutes: increment(mins)
-                });
-                loadUserStats(); 
-            } catch (err) {
-                console.error("[FocusHub] updateStats error:", err);
-            }
-        }
-
-        async function updateBreakStats() {
-            try {
-                if(!userStatsDocCache) return;
-                await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
-                loadUserStats();
-            } catch (err) {
-                console.error("[FocusHub] updateBreakStats error:", err);
-            }
-        }
-
-        // For now just log; you can later store extra analytics if you want
-        async function updateTaskStats(tid, mins) {
-            console.log("[FocusHub] Pomodoro complete for task", { taskId: tid, focusMinutes: mins });
-        }
-
-        // --- EVENTS ---
-        startBtn.onclick = startTimer;
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.onclick = () => switchMode(btn.dataset.mode));
-        
-        ['work', 'short', 'long'].forEach(t => {
-            const inp = document.getElementById(`${t}Duration`);
-            inp.onchange = () => {
-                durations[t] = Number(inp.value);
-                if(!timerInterval && currentMode === t) {
-                    remainingSeconds = durations[t]*60; updateTimeDisplay();
-                }
-            };
-        });
-
-        // Modal
-        const modal = document.getElementById("settingsModal");
-        document.getElementById("openSettingsBtn").onclick = () => modal.classList.add("open");
-        document.getElementById("closeSettingsBtn").onclick = () => modal.classList.remove("open");
-        modal.onclick = (e) => { if(e.target === modal) modal.classList.remove("open"); }
-
-        init();
-    </script>
+    init();
+</script>
 </body>
 </html>
