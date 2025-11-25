@@ -374,8 +374,11 @@
         // --- VARS ---
         const params = new URLSearchParams(window.location.search);
         const userId = params.get("userId") || "demo-user";
-        const boardId = params.get("boardId") || userId;   // still available if needed later
+        const boardId = params.get("boardId") || userId; // personal board id for this user
+
         document.getElementById("userLabel").textContent = params.get("userName") || "User";
+
+        console.log("[FocusHub] Boot:", { userId, boardId });
 
         let currentMode = "work"; 
         let remainingSeconds = 25 * 60;
@@ -475,6 +478,7 @@
 
         // --- INIT ---
         async function init() {
+            console.log("[FocusHub] init()");
             updateTimeDisplay();
             loadUserStats();
             loadUserTasks();
@@ -571,82 +575,116 @@
 
         // --- FIREBASE: USER STATS ---
         async function loadUserStats() {
-            const today = new Date().toISOString().slice(0, 10);
-            const ref = doc(db, "users", userId);
-            let snap = await getDoc(ref);
-            
-            if (!snap.exists()) {
-                await setDoc(ref, { today_date: today });
-                snap = await getDoc(ref);
+            try {
+                const today = new Date().toISOString().slice(0, 10);
+                const ref = doc(db, "users", userId);
+                let snap = await getDoc(ref);
+                
+                if (!snap.exists()) {
+                    await setDoc(ref, { today_date: today });
+                    snap = await getDoc(ref);
+                }
+                
+                let data = snap.data();
+                if (data.today_date !== today) {
+                    await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
+                    data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
+                }
+                
+                userStatsDocCache = ref;
+                document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
+                document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
+                document.getElementById("statBreaks").textContent = data.breaks_today || 0;
+                
+                // Load Toggles
+                document.getElementById("waterToggle").checked = !!data.water_reminder;
+                document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
+            } catch (err) {
+                console.error("[FocusHub] loadUserStats error:", err);
             }
-            
-            let data = snap.data();
-            if (data.today_date !== today) {
-                await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
-                data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
-            }
-            
-            userStatsDocCache = ref;
-            document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
-            document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
-            document.getElementById("statBreaks").textContent = data.breaks_today || 0;
-            
-            // Load Toggles
-            document.getElementById("waterToggle").checked = !!data.water_reminder;
-            document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
         }
 
-        // --- FIREBASE: TASKS FOR DROPDOWN ---
+        // --- FIREBASE: TASKS FROM boards/{boardId}.tasks[] ---
         async function loadUserTasks() {
             try {
-                // show loading state
+                console.log("[FocusHub] loadUserTasks start", { userId, boardId });
+
                 taskSelect.innerHTML = `
                     <option value="">(No Task Selected)</option>
                     <option value="" disabled>Loading tasks...</option>
                 `;
 
-                // All tasks assigned to this user (any board / status)
-                const q = query(
-                    collection(db, "tasks"),
-                    where("assigned_to", "==", userId)
+                const boardRef = doc(db, "boards", boardId);
+                const snap = await getDoc(boardRef);
+
+                if (!snap.exists()) {
+                    console.warn("[FocusHub] Board doc not found for boardId:", boardId);
+                    taskSelect.innerHTML = `
+                        <option value="">(No Task Selected)</option>
+                        <option value="" disabled>No board/tasks found</option>
+                    `;
+                    return;
+                }
+
+                const data = snap.data();
+                console.log("[FocusHub] Board doc loaded", {
+                    hasTasks: Array.isArray(data.tasks),
+                    hasProjects: Array.isArray(data.projects),
+                    hasWorkspaces: Array.isArray(data.workspaces)
+                });
+
+                const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+                const projects = Array.isArray(data.projects) ? data.projects : [];
+                const workspaces = Array.isArray(data.workspaces) ? data.workspaces : [];
+
+                console.log("[FocusHub] counts", {
+                    totalTasks: tasks.length,
+                    totalProjects: projects.length,
+                    totalWorkspaces: workspaces.length
+                });
+
+                // filter tasks where assignee.zoho_id == userId
+                const myTasks = tasks.filter(t =>
+                    t.assignee &&
+                    (t.assignee.zoho_id === userId || t.assignee.zoho_id === String(userId))
                 );
 
-                const snap = await getDocs(q);
+                console.log("[FocusHub] tasks assigned to user", {
+                    userId,
+                    matchedTasks: myTasks.length
+                });
 
-                // reset base option
                 taskSelect.innerHTML = '<option value="">(No Task Selected)</option>';
 
-                if (snap.empty) {
+                if (myTasks.length === 0) {
                     const opt = document.createElement("option");
                     opt.value = "";
                     opt.disabled = true;
-                    opt.textContent = "No tasks found for you";
+                    opt.textContent = "No tasks found for you on this board";
                     taskSelect.appendChild(opt);
                     return;
                 }
 
-                snap.forEach(d => {
-                    const data = d.data();
+                function getWorkspaceNameForTask(task) {
+                    const proj = projects.find(p => p.id === task.projectId);
+                    if (!proj) return "";
+                    const ws = workspaces.find(w => w.id === proj.workspaceId);
+                    return (ws && ws.name) || proj.name || "";
+                }
 
-                    const title = (data.title || data.task_name || "Untitled task").toString().trim();
-
-                    // workspace / project name – adjust field names if needed
-                    const workspaceName = (
-                        data.workspace_name ||
-                        data.workspace ||
-                        data.board_name ||
-                        ""
-                    ).toString().trim();
-
-                    const label = workspaceName ? `${title} – ${workspaceName}` : title;
+                myTasks.forEach(task => {
+                    const wsName = getWorkspaceNameForTask(task);
+                    const title = (task.name || "Untitled task").toString().trim();
+                    const label = wsName ? `${title} – ${wsName}` : title;
 
                     const opt = document.createElement("option");
-                    opt.value = d.id;        // task id
-                    opt.textContent = label; // what user sees
+                    opt.value = task.id;       // board task id
+                    opt.textContent = label;   // "Task – Workspace"
                     taskSelect.appendChild(opt);
                 });
+
             } catch (err) {
-                console.error("Error loading tasks in Focus Hub:", err);
+                console.error("[FocusHub] Error loading tasks:", err);
                 taskSelect.innerHTML = `
                     <option value="">(No Task Selected)</option>
                     <option value="" disabled>Failed to load tasks</option>
@@ -655,26 +693,31 @@
         }
 
         async function updateStats(mins) {
-            if(!userStatsDocCache) return;
-            await updateDoc(userStatsDocCache, { today_pomodoros: increment(1), today_focus_minutes: increment(mins) });
-            loadUserStats(); 
+            try {
+                if(!userStatsDocCache) return;
+                await updateDoc(userStatsDocCache, {
+                    today_pomodoros: increment(1),
+                    today_focus_minutes: increment(mins)
+                });
+                loadUserStats(); 
+            } catch (err) {
+                console.error("[FocusHub] updateStats error:", err);
+            }
         }
 
         async function updateBreakStats() {
-            if(!userStatsDocCache) return;
-            await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
-            loadUserStats();
+            try {
+                if(!userStatsDocCache) return;
+                await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
+                loadUserStats();
+            } catch (err) {
+                console.error("[FocusHub] updateBreakStats error:", err);
+            }
         }
 
+        // For now just log; you can later store extra analytics if you want
         async function updateTaskStats(tid, mins) {
-            const ref = doc(db, "tasks", tid);
-            await runTransaction(db, async (tx) => {
-                const s = await tx.get(ref);
-                if(s.exists()) {
-                    const d = s.data();
-                    tx.update(ref, { pomodoro_count: (d.pomodoro_count||0)+1, focus_minutes: (d.focus_minutes||0)+mins });
-                }
-            });
+            console.log("[FocusHub] Pomodoro complete for task", { taskId: tid, focusMinutes: mins });
         }
 
         // --- EVENTS ---
