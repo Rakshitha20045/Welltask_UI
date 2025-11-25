@@ -374,6 +374,7 @@
         // --- VARS ---
         const params = new URLSearchParams(window.location.search);
         const userId = params.get("userId") || "demo-user";
+        const boardId = params.get("boardId") || userId;   // 🔹 boardId from URL (dashboard board)
         document.getElementById("userLabel").textContent = params.get("userName") || "User";
 
         let currentMode = "work"; 
@@ -596,15 +597,47 @@
         }
 
         async function loadUserTasks() {
-            const q = query(collection(db, "tasks"), where("assigned_to", "==", userId), where("status", "==", "open"));
-            const snap = await getDocs(q);
-            taskSelect.innerHTML = '<option value="">-- Select Task --</option>';
-            snap.forEach(d => {
-                const opt = document.createElement("option");
-                opt.value = d.id;
-                opt.textContent = d.data().title;
-                taskSelect.appendChild(opt);
-            });
+            try {
+                // show loading state
+                taskSelect.innerHTML = `
+                    <option value="">(No Task Selected)</option>
+                    <option value="" disabled>Loading tasks...</option>
+                `;
+
+                const q = query(
+                    collection(db, "tasks"),
+                    where("board_id", "==", boardId),    // same board as dashboard
+                    where("assigned_to", "==", userId),  // my tasks
+                    where("status", "==", "open")        // only open tasks
+                );
+
+                const snap = await getDocs(q);
+
+                taskSelect.innerHTML = '<option value="">(No Task Selected)</option>';
+
+                if (snap.empty) {
+                    const opt = document.createElement("option");
+                    opt.value = "";
+                    opt.disabled = true;
+                    opt.textContent = "No open tasks on this board";
+                    taskSelect.appendChild(opt);
+                    return;
+                }
+
+                snap.forEach(d => {
+                    const data = d.data();
+                    const opt = document.createElement("option");
+                    opt.value = d.id;
+                    opt.textContent = data.title || "Untitled task";
+                    taskSelect.appendChild(opt);
+                });
+            } catch (err) {
+                console.error("Error loading tasks in Focus Hub:", err);
+                taskSelect.innerHTML = `
+                    <option value="">(No Task Selected)</option>
+                    <option value="" disabled>Failed to load tasks</option>
+                `;
+            }
         }
 
         async function updateStats(mins) {
