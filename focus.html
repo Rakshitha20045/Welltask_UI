@@ -266,7 +266,7 @@
         </div>
         
         <div class="current-task-section">
-            <div class="task-label">Currently Focusing On</div>
+            <div class="task-label">CURRENTLY FOCUSING ON</div>
             <select class="main-task-select" id="focusTaskSelect">
                 <option value="">(No Task Selected)</option>
                 <option value="" disabled>Loading tasks...</option>
@@ -374,7 +374,7 @@
         // --- VARS ---
         const params = new URLSearchParams(window.location.search);
         const userId = params.get("userId") || "demo-user";
-        const boardId = params.get("boardId") || userId;   // 🔹 boardId from URL (dashboard board)
+        const boardId = params.get("boardId") || userId;   // still available if needed later
         document.getElementById("userLabel").textContent = params.get("userName") || "User";
 
         let currentMode = "work"; 
@@ -569,7 +569,7 @@
             }
         }
 
-        // --- FIREBASE ---
+        // --- FIREBASE: USER STATS ---
         async function loadUserStats() {
             const today = new Date().toISOString().slice(0, 10);
             const ref = doc(db, "users", userId);
@@ -596,6 +596,7 @@
             document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
         }
 
+        // --- FIREBASE: TASKS FOR DROPDOWN ---
         async function loadUserTasks() {
             try {
                 // show loading state
@@ -604,31 +605,44 @@
                     <option value="" disabled>Loading tasks...</option>
                 `;
 
+                // All tasks assigned to this user (any board / status)
                 const q = query(
                     collection(db, "tasks"),
-                    where("board_id", "==", boardId),    // same board as dashboard
-                    where("assigned_to", "==", userId),  // my tasks
-                    where("status", "==", "open")        // only open tasks
+                    where("assigned_to", "==", userId)
                 );
 
                 const snap = await getDocs(q);
 
+                // reset base option
                 taskSelect.innerHTML = '<option value="">(No Task Selected)</option>';
 
                 if (snap.empty) {
                     const opt = document.createElement("option");
                     opt.value = "";
                     opt.disabled = true;
-                    opt.textContent = "No open tasks on this board";
+                    opt.textContent = "No tasks found for you";
                     taskSelect.appendChild(opt);
                     return;
                 }
 
                 snap.forEach(d => {
                     const data = d.data();
+
+                    const title = (data.title || data.task_name || "Untitled task").toString().trim();
+
+                    // workspace / project name – adjust field names if needed
+                    const workspaceName = (
+                        data.workspace_name ||
+                        data.workspace ||
+                        data.board_name ||
+                        ""
+                    ).toString().trim();
+
+                    const label = workspaceName ? `${title} – ${workspaceName}` : title;
+
                     const opt = document.createElement("option");
-                    opt.value = d.id;
-                    opt.textContent = data.title || "Untitled task";
+                    opt.value = d.id;        // task id
+                    opt.textContent = label; // what user sees
                     taskSelect.appendChild(opt);
                 });
             } catch (err) {
