@@ -7,12 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Chart.js for Reports -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
         :root {
-            /* Default Theme (Teal) */
             --bg-work: #2a9d8f;
             --bg-short: #457b9d;
             --bg-long: #6d597a;
@@ -36,7 +34,6 @@
             flex-direction: column;
         }
 
-        /* --- Header --- */
         .app-header {
             max-width: 620px;
             margin: 0 auto;
@@ -48,7 +45,6 @@
         }
 
         .logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-
         .header-actions { display: flex; gap: 10px; }
 
         .header-btn {
@@ -66,7 +62,6 @@
         }
         .header-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
-        /* --- Main Timer Area --- */
         .main-container {
             flex: 1;
             display: flex;
@@ -171,7 +166,7 @@
         .main-task-select:hover { background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.6); }
         .main-task-select option { background: var(--card-dark); color: white; text-align: left; }
 
-        /* --- Modals --- */
+        /* Report Styles */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
@@ -207,7 +202,6 @@
             gap: 8px; text-transform: uppercase;
         }
 
-        /* Report Styles */
         .report-nav {
             display: flex; gap: 15px; margin-bottom: 20px;
             border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;
@@ -218,24 +212,16 @@
         }
         .report-tab.active { color: white; border-bottom: 2px solid white; }
         
-        .time-filter-row { display:flex; gap:10px; margin-bottom:15px; }
-        .time-filter-btn {
-            background: rgba(255,255,255,0.1); border:none; color:#ccc;
-            padding: 4px 12px; border-radius: 12px; font-size:12px; cursor:pointer;
-        }
-        .time-filter-btn.active { background: #4ade80; color: #1e293b; font-weight:700; }
-
         .report-summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
         .summary-card {
             flex: 1; background: rgba(255,255,255,0.05); padding: 15px;
             border-radius: 8px; text-align: center;
         }
-        .sum-val { font-size: 24px; font-weight: 700; color: #4ade80; }
-        .sum-lbl { font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-top: 5px; }
+        .sum-val { font-size: 20px; font-weight: 700; color: #4ade80; }
+        .sum-lbl { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-top: 5px; }
 
-        .chart-container { position: relative; height: 250px; width: 100%; }
+        .chart-container { position: relative; height: 250px; width: 100%; margin-bottom: 20px; }
         
-        /* Break Decision Modal Specifics */
         .break-option-btn {
             width: 100%; padding: 15px; margin-bottom: 10px;
             border: 2px solid rgba(255,255,255,0.1); border-radius: 8px;
@@ -246,6 +232,19 @@
         .break-option-btn:hover { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
         .break-option-btn strong { display: block; font-size: 16px; margin-bottom: 2px; }
         .break-option-btn small { font-size: 12px; color: #94a3b8; }
+
+        .ranking-list { list-style: none; padding: 0; margin: 0; }
+        .ranking-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .rank-name { font-size: 14px; color: white; }
+        .rank-bar-bg {
+            flex: 1; height: 6px; background: rgba(255,255,255,0.1);
+            margin: 0 15px; border-radius: 3px; overflow: hidden;
+        }
+        .rank-bar-fill { height: 100%; background: #4ade80; }
+        .rank-time { font-size: 13px; color: #94a3b8; min-width: 50px; text-align: right; }
 
         /* Settings Inputs */
         label { display: block; font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
@@ -329,11 +328,10 @@
     </div>
 </div>
 
-<!-- BREAK DECISION MODAL -->
 <div class="modal-overlay" id="breakModal" style="z-index: 1100;">
     <div class="modal-content" style="max-width:400px; text-align:center;">
-        <h2 style="margin-top:0;">Focus Session Complete! 🎉</h2>
-        <p style="color:#cbd5e1; margin-bottom:20px;">Great job! How would you like to proceed?</p>
+        <h2 style="margin-top:0;">Session Complete! 🎉</h2>
+        <p style="color:#cbd5e1; margin-bottom:20px;">Prioritize your wellness. What's next?</p>
         
         <button class="break-option-btn" onclick="handleBreakDecision('take')">
             <div style="font-size:24px;">☕</div>
@@ -347,7 +345,7 @@
             <div style="font-size:24px;">⏭</div>
             <div>
                 <strong>Skip Break</strong>
-                <small>Go straight back to focus. Streak pauses.</small>
+                <small>Go back to work. Streak Resets.</small>
             </div>
         </button>
         
@@ -361,14 +359,9 @@
     </div>
 </div>
 
-<!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settingsModal">
     <div class="modal-content">
-        <div class="modal-header">
-            <h3>SETTINGS</h3>
-            <button class="close-btn" id="closeSettingsBtn">✕</button>
-        </div>
-        <!-- (Settings content same as before) -->
+        <div class="modal-header"><h3>SETTINGS</h3><button class="close-btn" id="closeSettingsBtn">✕</button></div>
         <div class="dark-card">
             <div class="card-title">⏱ Durations (Minutes)</div>
             <div class="row-inputs">
@@ -378,8 +371,7 @@
             </div>
             <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <label>Long Break Interval</label>
-                    <span id="intervalDisplay" style="font-size:12px; font-weight:700; color:#4ade80;">4 Pomodoros</span>
+                    <label>Long Break Interval</label><span id="intervalDisplay" style="font-size:12px; font-weight:700; color:#4ade80;">4 Pomodoros</span>
                 </div>
                 <input type="range" id="intervalSlider" min="1" max="8" value="4" step="1">
             </div>
@@ -402,25 +394,19 @@
                     </div>
                 </div>
             </div>
-            <div class="input-group">
-                <label>Volume</label>
-                <input type="range" id="volumeSlider" min="0" max="100" value="50">
-            </div>
-            <div class="toggle-row" style="margin-top:10px;">
-                <span class="toggle-label">Ticking Sound</span>
-                <label class="switch"><input type="checkbox" id="tickToggle"><span class="slider"></span></label>
-            </div>
+            <div class="input-group"><label>Volume</label><input type="range" id="volumeSlider" min="0" max="100" value="50"></div>
+            <div class="toggle-row" style="margin-top:10px;"><span class="toggle-label">Ticking Sound</span><label class="switch"><input type="checkbox" id="tickToggle"><span class="slider"></span></label></div>
         </div>
         <div class="dark-card">
             <div class="card-title">🎨 Color Themes</div>
             <div class="theme-row">
-                <div class="theme-swatch selected" style="background:#2a9d8f;" data-theme="teal" title="Mindful Teal"></div>
-                <div class="theme-swatch" style="background:#db524d;" data-theme="red" title="Classic Red"></div>
-                <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue" title="Ocean Blue"></div>
-                <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple" title="Creative Purple"></div>
-                <div class="theme-swatch" style="background:#f97316;" data-theme="orange" title="Energy Orange"></div>
-                <div class="theme-swatch" style="background:#ec4899;" data-theme="pink" title="Playful Pink"></div>
-                <div class="theme-swatch" style="background:#475569;" data-theme="slate" title="Dark Slate"></div>
+                <div class="theme-swatch selected" style="background:#2a9d8f;" data-theme="teal"></div>
+                <div class="theme-swatch" style="background:#db524d;" data-theme="red"></div>
+                <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue"></div>
+                <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple"></div>
+                <div class="theme-swatch" style="background:#f97316;" data-theme="orange"></div>
+                <div class="theme-swatch" style="background:#ec4899;" data-theme="pink"></div>
+                <div class="theme-swatch" style="background:#475569;" data-theme="slate"></div>
             </div>
         </div>
         <div class="dark-card">
@@ -432,52 +418,42 @@
     </div>
 </div>
 
-<!-- REPORT MODAL -->
 <div class="modal-overlay" id="reportModal">
     <div class="modal-content">
-        <div class="modal-header">
-            <h3>ACTIVITY REPORT</h3>
-            <button class="close-btn" id="closeReportBtn">✕</button>
-        </div>
-
+        <div class="modal-header"><h3>ACTIVITY REPORT</h3><button class="close-btn" id="closeReportBtn">✕</button></div>
         <div class="dark-card">
             <nav class="report-nav">
-                <button class="report-tab active" onclick="switchReportTab('activity')" id="tabActivity">Activity</button>
-                <button class="report-tab" onclick="switchReportTab('project')" id="tabProject">Project / Task</button>
+                <button class="report-tab active" onclick="switchReportTab('activity')" id="tabActivity">Daily Activity</button>
+                <button class="report-tab" onclick="switchReportTab('project')" id="tabProject">Projects</button>
             </nav>
 
             <div id="viewActivity">
-                <div class="time-filter-row">
-                    <button class="time-filter-btn active" onclick="updateActivityChart('daily', this)">Daily</button>
-                    <button class="time-filter-btn" onclick="updateActivityChart('weekly', this)">Weekly</button>
-                    <button class="time-filter-btn" onclick="updateActivityChart('monthly', this)">Monthly</button>
-                </div>
-
                 <div class="report-summary-row">
                     <div class="summary-card">
-                        <div class="sum-val" id="repFocusHours">0.0</div>
-                        <div class="sum-lbl">Hours Focused</div>
+                        <div class="sum-val" id="repPomos">0</div>
+                        <div class="sum-lbl">Pomodoros</div>
                     </div>
                     <div class="summary-card">
-                        <div class="sum-val" id="repStreak">0</div>
-                        <div class="sum-lbl">Current Streak</div>
+                        <div class="sum-val" id="repMinutes">0</div>
+                        <div class="sum-lbl">Minutes</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="sum-val" id="repBreaks">0</div>
+                        <div class="sum-lbl">Breaks</div>
                     </div>
                 </div>
-                <div class="card-title">Focus Trends</div>
+                <div class="card-title">Today's Session Breakdown</div>
                 <div class="chart-container">
                     <canvas id="activityChart"></canvas>
-                </div>
-                <div style="margin-top:10px; text-align:right;">
-                    <button onclick="generateDemoData()" style="background:none; border:1px solid #4ade80; color:#4ade80; border-radius:4px; font-size:10px; cursor:pointer; padding:2px 6px;">Simulate Data (Demo)</button>
                 </div>
             </div>
 
             <div id="viewProject" style="display:none;">
-                <div class="card-title">Time Distribution</div>
+                <div class="card-title">Project Distribution</div>
                 <div class="chart-container" style="height:200px; margin-bottom:20px;">
                     <canvas id="projectChart"></canvas>
                 </div>
-                <div class="card-title">Task Ranking</div>
+                <div class="card-title">All Task Ranking (Includes Completed)</div>
                 <ul class="ranking-list" id="rankingList">
                     <li class="ranking-item" style="color:#aaa; text-align:center;">No data available</li>
                 </ul>
@@ -520,6 +496,13 @@
     let longBreakInterval  = 4; 
     let currentStreak = 0;
 
+    // Charts
+    let activityChart = null;
+    let projectChart = null;
+    
+    // Stats for Session Breakdown
+    let sessionStats = { work: 0, short: 0, long: 0 };
+
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
         red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
@@ -537,12 +520,7 @@
     const finishBtn = document.getElementById("finishTaskBtn");
     const taskSelect = document.getElementById("focusTaskSelect");
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Charts
-    let activityChart = null;
-    let projectChart = null;
 
-    // --- Sound Logic ---
     function getVolume() { return document.getElementById("volumeSlider").value / 100; }
     function playSound(type) {
         if (type === "none") return;
@@ -626,11 +604,14 @@
 
     function switchMode(mode) {
         currentMode = mode;
+        // Fix: Use the durations object to reset time
         remainingSeconds = durations[mode] * 60;
         updateModeColors();
+        
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
         stopTimer();
         updateTimeDisplay();
+        
         if(currentMode !== 'work') { finishBtn.style.display = 'none'; } 
         else if (timerInterval && taskSelect.value) { finishBtn.style.display = 'flex'; }
     }
@@ -643,15 +624,21 @@
     }
 
     function startTimer() {
+        // Fix: Ensure timer stops first if already running
+        if (timerInterval) {
+            stopTimer();
+            return;
+        }
+
         if (currentMode === "work" && !taskSelect.value) {
             alert("Please select a task to start focusing.");
             return;
         }
-        if (timerInterval) { stopTimer(); return; }
         
         startBtn.textContent = "PAUSE";
         startBtn.style.boxShadow = "none";
         startBtn.style.transform = "translateY(4px)";
+        
         if (currentMode === "work") finishBtn.style.display = 'flex';
         if (document.getElementById("tickToggle").checked) startTicking();
 
@@ -679,15 +666,17 @@
         const totalSeconds = durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
         const minsSpent = Math.ceil(elapsedSeconds / 60);
+        
         const tid = taskSelect.value;
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
+            sessionStats.work++;
         }
+        
         remainingSeconds = durations.work * 60;
         updateTimeDisplay();
         await loadBoardTasksIntoDropdown();
-        // Early finish also triggers the break decision? Let's say yes for good habits.
         showBreakDecisionModal();
     };
 
@@ -697,29 +686,28 @@
         if (currentMode === "work") {
             const mins = durations.work;
             pomodoroCycleCount++;
+            sessionStats.work++;
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
             const tid = taskSelect.value;
             if (tid) await updateTaskStatsOnly(tid, mins);
-            
-            // SHOW BREAK DECISION MODAL INSTEAD OF AUTO SWITCH
             showBreakDecisionModal();
         } else {
-            // Break is done.
+            // Break finished
+            if(currentMode === 'short') sessionStats.short++;
+            if(currentMode === 'long') sessionStats.long++;
             playSound(document.getElementById("breakSoundType").value);
-            await updateBreakStats(); // Count break for streak logic if needed
+            await updateBreakStats();
             
-            // Auto switch back to work if enabled
             if (document.getElementById("autoSwitchToggle").checked) {
                 switchMode("work");
-                // Don't auto-start if no task
             } else {
                 switchMode("work");
             }
         }
     }
 
-    // --- Break Decision Logic ---
+    // --- Wellness & Break Logic ---
     window.showBreakDecisionModal = function() {
         document.getElementById("breakModal").classList.add("open");
     }
@@ -728,32 +716,33 @@
         document.getElementById("breakModal").classList.remove("open");
         
         if (decision === 'take') {
-            // Good behavior! Streak Up.
+            // Good: Streak Up
             currentStreak++;
             updateStreakUI();
             
-            // Determine Short or Long Break
             let nextMode = "short";
             if (pomodoroCycleCount >= longBreakInterval) {
                 nextMode = "long";
                 pomodoroCycleCount = 0;
             }
             switchMode(nextMode);
-            startTimer(); // Auto start break
+            startTimer(); 
             
         } else if (decision === 'skip') {
-            // Bad behavior. No Streak increase (or maybe reset? Let's just not increase).
-            // Go straight back to work
+            // Bad: Streak Reset!
+            if (currentStreak > 0) alert("Streak Lost! wellness check failed.");
+            currentStreak = 0; 
+            updateStreakUI();
+
             switchMode("work");
-            // If auto-start is on, start work, otherwise wait
             if (document.getElementById("autoSwitchToggle").checked) {
                 if(taskSelect.value) startTimer();
             }
 
         } else if (decision === 'remind') {
-            // Extend current work session
-            currentMode = 'work'; // Ensure we stay in work mode
-            remainingSeconds = 5 * 60; // Add 5 mins
+            // Neutral
+            currentMode = 'work';
+            remainingSeconds = 5 * 60; 
             updateTimeDisplay();
             startTimer();
         }
@@ -765,11 +754,10 @@
         streakEl.textContent = currentStreak;
         if (currentStreak > 0) streakBadge.style.opacity = 1;
         
-        // Save streak to DB if you want persistence
-        // updateDoc(userStatsDocCache, { current_streak: currentStreak });
+        if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak });
     }
 
-    // --- Stats & Firebase ---
+    // --- Firebase ---
     async function loadUserStats() {
         try {
             const today = new Date().toISOString().slice(0, 10);
@@ -785,9 +773,17 @@
                 data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
             }
             userStatsDocCache = ref;
-            // Load streak if exists
             currentStreak = data.current_streak || 0;
             updateStreakUI();
+            
+            // Populate Summary
+            document.getElementById("repPomos").textContent = data.today_pomodoros || 0;
+            document.getElementById("repMinutes").textContent = data.today_focus_minutes || 0;
+            document.getElementById("repBreaks").textContent = data.breaks_today || 0;
+            
+            // Init Session Stats for chart
+            sessionStats.work = data.today_pomodoros || 0;
+            sessionStats.short = data.breaks_today || 0; // approximate
         } catch (err) { console.error(err); }
     }
 
@@ -820,13 +816,17 @@
         await updateDoc(userStatsDocCache, {
             today_pomodoros: increment(1),
             today_focus_minutes: increment(mins),
-            current_streak: currentStreak // persist streak
+            current_streak: currentStreak
         });
+        // Update UI
+        document.getElementById("repPomos").textContent = parseInt(document.getElementById("repPomos").textContent) + 1;
+        document.getElementById("repMinutes").textContent = parseInt(document.getElementById("repMinutes").textContent) + mins;
     }
 
     async function updateBreakStats() {
         if (!userStatsDocCache) return;
         await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
+        document.getElementById("repBreaks").textContent = parseInt(document.getElementById("repBreaks").textContent) + 1;
     }
 
     async function updateTaskStatsOnly(tid, mins) {
@@ -863,77 +863,35 @@
         } catch (err) { console.error(err); }
     }
 
-    // --- Report System ---
+    // --- Reporting ---
     window.switchReportTab = function(tabName) {
         document.getElementById('viewActivity').style.display = tabName === 'activity' ? 'block' : 'none';
         document.getElementById('viewProject').style.display = tabName === 'project' ? 'block' : 'none';
         document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
         document.getElementById('tabProject').classList.toggle('active', tabName === 'project');
         
-        if(tabName === 'activity') updateActivityChart('daily');
+        if(tabName === 'activity') renderActivityChart();
         if(tabName === 'project') generateProjectReport();
     }
-    
-    // Demo Data Generator for Judges
-    window.generateDemoData = function() {
-        const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-        const data = [2, 4.5, 3, 5.5, 4, 1, 0];
-        renderActivityChart(labels, data, "Hours");
-        document.getElementById("repFocusHours").textContent = "20.0";
-        document.getElementById("repStreak").textContent = "5";
-        alert("Demo data loaded for presentation!");
-    }
 
-    window.updateActivityChart = function(type, btn) {
-        if(btn) {
-            document.querySelectorAll('.time-filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }
-        
-        // In a real app, you fetch historical data from a subcollection
-        // For hackathon, we simulate or show today's if daily
-        let labels = [], data = [];
-        
-        if (type === 'daily') {
-            labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-            // We only have today's real data. 
-            // Mocking previous days as 0 or random for visual if desired, but let's keep it simple.
-            data = [0, 0, 0, 0, 0, 0, 0];
-            const dayIndex = new Date().getDay() - 1; // 0=Mon
-            const todayMins = userStatsDocCache ? 0 : 0; // Fetch real mins here if needed
-            // data[dayIndex] = todayMins / 60;
-        } else if (type === 'weekly') {
-            labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
-            data = [0, 0, 0, 0];
-        } else {
-            labels = ["Jan", "Feb", "Mar", "Apr", "May"];
-            data = [0, 0, 0, 0, 0];
-        }
-        renderActivityChart(labels, data, "Hours");
-    }
-
-    function renderActivityChart(labels, data, label) {
+    function renderActivityChart() {
+        // Simple Pie Chart for Today's Breakdown
         const ctx = document.getElementById('activityChart').getContext('2d');
         if (activityChart) activityChart.destroy();
         activityChart = new Chart(ctx, {
-            type: 'bar',
+            type: 'pie',
             data: {
-                labels: labels,
+                labels: ['Focus Sessions', 'Short Breaks', 'Long Breaks'],
                 datasets: [{
-                    label: label,
-                    data: data,
-                    backgroundColor: '#4ade80',
-                    borderRadius: 4
+                    data: [sessionStats.work, sessionStats.short, sessionStats.long],
+                    backgroundColor: ['#2a9d8f', '#457b9d', '#6d597a'],
+                    borderWidth: 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } },
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
-                }
+                plugins: { legend: { position: 'right', labels: { color: 'white' } } }
             }
         });
     }
@@ -946,42 +904,49 @@
         const tasks = bData.tasks || [];
         const projects = bData.projects || [];
         
-        const projMap = {}; // { projName: minutes }
+        const projMap = {}; 
         projects.forEach(p => projMap[p.id] = { name: p.name, minutes: 0 });
         
+        // Summing UP time for ALL tasks (Done or Not)
         tasks.forEach(t => {
             if (t.projectId && projMap[t.projectId]) {
                 projMap[t.projectId].minutes += (t.focus_minutes || 0);
             }
         });
 
-        // Prepare Chart Data
         const labels = [];
         const data = [];
         const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24'];
         const rankList = document.getElementById("rankingList");
         rankList.innerHTML = "";
-
+        
+        // Populate Chart Data
         Object.values(projMap).forEach((p) => {
             if (p.minutes > 0) {
                 labels.push(p.name);
                 data.push(p.minutes);
-                
-                // Add to ranking list
+            }
+        });
+
+        // Populate Ranking List (Includes completed)
+        // Sort tasks by minutes desc
+        const sortedTasks = [...tasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
+        
+        sortedTasks.forEach(t => {
+            if ((t.focus_minutes || 0) > 0) {
                 const li = document.createElement("li");
                 li.className = "ranking-item";
+                const statusIcon = (t.status === "Done") ? "✅ " : "";
                 li.innerHTML = `
-                    <span class="rank-name">${p.name}</span>
-                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, p.minutes)}%"></div></div>
-                    <span class="rank-time">${p.minutes}m</span>
+                    <span class="rank-name">${statusIcon}${t.name}</span>
+                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.focus_minutes)}%"></div></div>
+                    <span class="rank-time">${t.focus_minutes}m</span>
                 `;
                 rankList.appendChild(li);
             }
         });
 
-        if (data.length === 0) {
-            rankList.innerHTML = '<li class="ranking-item" style="color:#aaa; text-align:center;">No project activity yet</li>';
-        }
+        if (data.length === 0) rankList.innerHTML = '<li class="ranking-item" style="color:#aaa; text-align:center;">No activity recorded yet</li>';
 
         const ctx = document.getElementById('projectChart').getContext('2d');
         if (projectChart) projectChart.destroy();
@@ -989,11 +954,7 @@
             type: 'doughnut',
             data: {
                 labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: colors,
-                    borderWidth: 0
-                }]
+                datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
             },
             options: {
                 responsive: true,
@@ -1006,17 +967,11 @@
     // Modal Events
     const settingsModal = document.getElementById("settingsModal");
     const reportModal = document.getElementById("reportModal");
-
     document.getElementById("openSettingsBtn").onclick = () => settingsModal.classList.add("open");
     document.getElementById("closeSettingsBtn").onclick = () => settingsModal.classList.remove("open");
-    
-    document.getElementById("openReportBtn").onclick = () => {
-        reportModal.classList.add("open");
-        updateActivityChart('daily'); // Default view
-    };
+    document.getElementById("openReportBtn").onclick = () => { reportModal.classList.add("open"); switchReportTab('activity'); };
     document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
 
-    // Slider
     const intervalSlider = document.getElementById("intervalSlider");
     const intervalDisplay = document.getElementById("intervalDisplay");
     intervalSlider.oninput = () => {
