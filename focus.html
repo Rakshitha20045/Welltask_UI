@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
+            /* Default Theme (Teal) */
             --bg-work: #2a9d8f;
             --bg-short: #457b9d;
             --bg-long: #6d597a;
@@ -132,7 +133,6 @@
         }
         .start-btn:active { transform: translateY(4px); box-shadow: none; }
 
-        /* New Finish Button */
         .finish-btn {
             background: transparent;
             border: 2px solid rgba(255,255,255,0.4);
@@ -269,6 +269,7 @@
             gap: 12px;
             justify-content: center;
             margin-top: 10px;
+            flex-wrap: wrap; /* Allow wrapping for more colors */
         }
         .theme-swatch {
             width: 40px;
@@ -340,6 +341,14 @@
             text-transform: uppercase;
             margin-top: 4px;
         }
+        
+        .sound-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .sound-col { flex: 1; }
     </style>
 </head>
 <body>
@@ -396,21 +405,51 @@
                 <div><label>Short</label><input type="number" id="shortDuration" value="5" min="1"></div>
                 <div><label>Long</label><input type="number" id="longDuration" value="15" min="1"></div>
             </div>
+            
+            <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <label>Long Break Interval</label>
+                    <span id="intervalDisplay" style="font-size:12px; font-weight:700; color:#4ade80;">4 Pomodoros</span>
+                </div>
+                <input type="range" id="intervalSlider" min="1" max="8" value="4" step="1">
+                <div style="font-size:10px; color:#64748b; margin-top:4px;">
+                    Auto-switches to Long Break after this many focus sessions.
+                </div>
+            </div>
         </div>
 
         <div class="dark-card">
             <div class="card-title">🔊 Sound</div>
-            <div class="input-group" style="margin-bottom:12px;">
-                <label>Alarm Sound</label>
-                <div style="display:flex; gap:8px;">
-                    <select id="alarmSoundType">
-                        <option value="bell">Bell</option>
-                        <option value="digital">Digital</option>
-                        <option value="wood">Woodblock</option>
-                    </select>
-                    <button id="testSoundBtn" style="background:#334155;border:none;color:white;border-radius:4px;padding:0 10px;cursor:pointer;">▶</button>
+            
+            <div class="sound-row">
+                <div class="sound-col">
+                    <label>Focus End</label>
+                    <div style="display:flex; gap:4px;">
+                        <select id="workSoundType">
+                            <option value="none">None</option>
+                            <option value="digital" selected>Digital</option>
+                            <option value="bell">Bell</option>
+                            <option value="wood">Wood</option>
+                            <option value="melody">Melody</option>
+                        </select>
+                        <button class="test-btn" data-target="workSoundType" style="background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;">▶</button>
+                    </div>
+                </div>
+                <div class="sound-col">
+                    <label>Break End</label>
+                    <div style="display:flex; gap:4px;">
+                        <select id="breakSoundType">
+                            <option value="none">None</option>
+                            <option value="melody" selected>Melody</option>
+                            <option value="digital">Digital</option>
+                            <option value="bell">Bell</option>
+                            <option value="wood">Wood</option>
+                        </select>
+                        <button class="test-btn" data-target="breakSoundType" style="background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;">▶</button>
+                    </div>
                 </div>
             </div>
+
             <div class="input-group">
                 <label>Volume</label>
                 <input type="range" id="volumeSlider" min="0" max="100" value="50">
@@ -431,6 +470,9 @@
                 <div class="theme-swatch" style="background:#db524d;" data-theme="red" title="Classic Red"></div>
                 <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue" title="Ocean Blue"></div>
                 <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple" title="Creative Purple"></div>
+                <div class="theme-swatch" style="background:#f97316;" data-theme="orange" title="Energy Orange"></div>
+                <div class="theme-swatch" style="background:#ec4899;" data-theme="pink" title="Playful Pink"></div>
+                <div class="theme-swatch" style="background:#475569;" data-theme="slate" title="Dark Slate"></div>
             </div>
         </div>
 
@@ -500,11 +542,20 @@
     let userStatsDocCache = null;
     let durations = { work: 25, short: 5, long: 15 };
 
+    // --- NEW LOGIC: Cycle Counter ---
+    let pomodoroCycleCount = 0; 
+    let longBreakInterval  = 4; 
+    // --------------------------------
+
+    // Updated Themes (Added Orange, Pink, Slate)
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
         red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
         blue:   { work: '#3b82f6', short: '#0ea5e9', long: '#6366f1' },
-        purple: { work: '#8b5cf6', short: '#a855f7', long: '#d946ef' }
+        purple: { work: '#8b5cf6', short: '#a855f7', long: '#d946ef' },
+        orange: { work: '#f97316', short: '#ea580c', long: '#c2410c' },
+        pink:   { work: '#ec4899', short: '#db2777', long: '#be185d' },
+        slate:  { work: '#475569', short: '#334155', long: '#1e293b' }
     };
     let activeTheme = "teal";
 
@@ -518,39 +569,43 @@
 
     function getVolume() { return document.getElementById("volumeSlider").value / 100; }
 
+    // Enhanced Sound Function with Melody and None support
     function playSound(type) {
+        if (type === "none") return; // Mute logic
+
         if (audioCtx.state === "suspended") audioCtx.resume();
         const vol = getVolume();
         if (vol <= 0.01) return;
 
-        const osc  = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
         const now = audioCtx.currentTime;
 
+        // Helper for oscillators
+        const playTone = (freq, type, start, dur) => {
+            const osc  = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(vol, start);
+            gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+            osc.start(start);
+            osc.stop(start + dur);
+        };
+
         if (type === "bell") {
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(523.25, now);
-            gain.gain.setValueAtTime(vol, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
-            osc.start(now);
-            osc.stop(now + 1.5);
+            playTone(523.25, "sine", now, 1.5);
         } else if (type === "digital") {
-            osc.type = "square";
-            osc.frequency.setValueAtTime(880, now);
-            osc.frequency.setValueAtTime(1760, now + 0.1);
-            gain.gain.setValueAtTime(vol * 0.1, now);
-            gain.gain.linearRampToValueAtTime(0, now + 0.2);
-            osc.start(now);
-            osc.stop(now + 0.2);
+            playTone(880, "square", now, 0.1);
+            playTone(1760, "square", now + 0.1, 0.1);
         } else if (type === "wood") {
-            osc.type = "triangle";
-            osc.frequency.setValueAtTime(800, now);
-            gain.gain.setValueAtTime(vol, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            osc.start(now);
-            osc.stop(now + 0.1);
+            playTone(800, "triangle", now, 0.1);
+        } else if (type === "melody") {
+            // Simple Major Arpeggio (C-E-G-C)
+            playTone(523.25, "sine", now, 0.3);       // C4
+            playTone(659.25, "sine", now + 0.2, 0.3); // E4
+            playTone(783.99, "sine", now + 0.4, 0.3); // G4
+            playTone(1046.5, "sine", now + 0.6, 0.6); // C5
         }
     }
 
@@ -579,15 +634,23 @@
         tickInterval = null;
     }
 
-    document.getElementById("testSoundBtn").onclick = () => {
-        playSound(document.getElementById("alarmSoundType").value);
-    };
+    // Play button handlers for settings
+    document.querySelectorAll(".test-btn").forEach(btn => {
+        btn.onclick = () => {
+            const selectId = btn.dataset.target;
+            const type = document.getElementById(selectId).value;
+            playSound(type);
+        };
+    });
 
     async function init() {
         updateTimeDisplay();
         await loadUserStats();
         await loadBoardTasksIntoDropdown();
         applyTheme(activeTheme);
+        
+        // Initialize Slider text
+        document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
     }
 
     function applyTheme(name) {
@@ -624,7 +687,6 @@
         stopTimer();
         updateTimeDisplay();
         
-        // Hide finish button if not in work mode
         if(currentMode !== 'work') {
             finishBtn.style.display = 'none';
         } else if (timerInterval && taskSelect.value) {
@@ -640,24 +702,20 @@
     }
 
     function startTimer() {
-        // 1. REQ: Only start if task is selected (when in work mode)
         if (currentMode === "work" && !taskSelect.value) {
             alert("Please select a task from the list below to start focusing.");
             return;
         }
 
         if (timerInterval) {
-            // Pausing
             stopTimer();
             return;
         }
         
-        // Starting
         startBtn.textContent = "PAUSE";
         startBtn.style.boxShadow = "none";
         startBtn.style.transform = "translateY(4px)";
 
-        // Show finish button only in work mode
         if (currentMode === "work") {
             finishBtn.style.display = 'flex';
         }
@@ -678,62 +736,84 @@
         startBtn.textContent = "START";
         startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
         startBtn.style.transform = "translateY(0)";
-        finishBtn.style.display = 'none'; // Hide finish button when paused/stopped
+        finishBtn.style.display = 'none';
     }
 
-    // 2. REQ: Finish Task Early logic
     finishBtn.onclick = async () => {
-        if (!confirm("Are you sure you want to complete this task now? The time spent so far will be recorded.")) return;
+        if (!confirm("Are you sure you want to complete this task now?")) return;
 
         stopTimer();
-        playSound('digital'); // Success sound
+        playSound('digital'); // Success confirmation
 
-        // Calculate time spent (Total - Remaining)
         const totalSeconds = durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
-        const minsSpent = Math.max(1, Math.round(elapsedSeconds / 60)); // Record at least 1 min
-
-        console.log(`[FocusHub] Task finished early. Time spent: ${minsSpent} mins`);
+        const minsSpent = Math.ceil(elapsedSeconds / 60); // Round UP
 
         const tid = taskSelect.value;
         if (tid) {
-            await updateStats(minsSpent); // Add to daily total
-            await markTaskAsDone(tid, minsSpent); // Mark done & add time
+            await updateStats(minsSpent);
+            await markTaskAsDone(tid, minsSpent);
         }
 
-        // Reset and reload
         remainingSeconds = durations.work * 60;
         updateTimeDisplay();
-        alert(`Great job! Task completed. ${minsSpent} minutes recorded.`);
-        await loadBoardTasksIntoDropdown(); // Refresh list to remove done task
+        alert(`Task completed. ${minsSpent} minutes recorded.`);
+        await loadBoardTasksIntoDropdown();
     };
 
+    // --- UPDATED MAIN LOGIC: Handles Sounds & Long Break Cycles ---
     async function completeTimer() {
         stopTimer();
-        playSound(document.getElementById("alarmSoundType").value);
+
+        // 1. Play Correct Sound based on Mode
+        if (currentMode === "work") {
+            const sType = document.getElementById("workSoundType").value;
+            playSound(sType);
+        } else {
+            // Break ending
+            const sType = document.getElementById("breakSoundType").value;
+            playSound(sType);
+        }
 
         if (currentMode === "work") {
             const mins = durations.work;
+            
+            // 2. Increment Cycle
+            pomodoroCycleCount++;
+            console.log(`[FocusHub] Cycle: ${pomodoroCycleCount} / ${longBreakInterval}`);
+
             await updateStats(mins);
             const tid = taskSelect.value;
-            if (tid) await updateTaskStatsOnly(tid, mins); // Add time, but don't mark done automatically
+            if (tid) await updateTaskStatsOnly(tid, mins);
         } else {
             await updateBreakStats();
         }
 
         if (document.getElementById("autoSwitchToggle").checked) {
-            const next = currentMode === "work" ? "short" : "work";
-            switchMode(next);
-            // If switching to work, check for task again
-            if (next === 'work' && !taskSelect.value) {
-                // Do not auto-start if no task
+            let nextMode = "work";
+
+            if (currentMode === "work") {
+                // 3. Logic: Triggers Long Break if Cycle limit reached
+                if (pomodoroCycleCount >= longBreakInterval) {
+                    nextMode = "long";
+                    pomodoroCycleCount = 0; // Reset
+                } else {
+                    nextMode = "short";
+                }
+            } else {
+                // Break ended -> Back to work
+                nextMode = "work";
+            }
+
+            switchMode(nextMode);
+
+            if (nextMode === 'work' && !taskSelect.value) {
+                // Wait for user task selection
             } else {
                 startTimer();
             }
         }
     }
-
-    // --- Firebase Logic ---
 
     async function loadUserStats() {
         try {
@@ -761,11 +841,8 @@
             document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
             document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
             document.getElementById("statBreaks").textContent = data.breaks_today || 0;
-
-            document.getElementById("waterToggle").checked   = !!data.water_reminder;
-            document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
         } catch (err) {
-            console.error("[FocusHub] Error loading user stats:", err);
+            console.error(err);
         }
     }
 
@@ -784,32 +861,24 @@
 
             const board = snap.data();
             const projects    = Array.isArray(board.projects)    ? board.projects    : [];
-            const workspaces  = Array.isArray(board.workspaces)  ? board.workspaces  : [];
             const tasks       = Array.isArray(board.tasks)       ? board.tasks       : [];
 
             const projectById = {};
             projects.forEach(p => { projectById[p.id] = p; });
 
-            const workspaceById = {};
-            workspaces.forEach(w => { workspaceById[w.id] = w; });
-
             const openTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
 
             openTasks.forEach(t => {
                 const project   = projectById[t.projectId];
-                // 3. REQ: Filter out Unknown Projects/Workspaces
                 if (!project) return; 
-
-                const workspace = workspaceById[project.workspaceId];
-                if (!workspace) return;
 
                 const opt = document.createElement("option");
                 opt.value = t.id;
-                opt.textContent = `${t.name} • ${project.name}`; // Clean Format
+                opt.textContent = `${t.name} • ${project.name}`; 
                 taskSelect.appendChild(opt);
             });
         } catch (err) {
-            console.error("[FocusHub] Error:", err);
+            console.error(err);
         }
     }
 
@@ -819,7 +888,6 @@
             today_pomodoros: increment(1),
             today_focus_minutes: increment(mins)
         });
-        // Update UI immediately
         const curMins = parseInt(document.getElementById("statFocusMinutes").textContent) || 0;
         const curPomo = parseInt(document.getElementById("statPomosToday").textContent) || 0;
         document.getElementById("statFocusMinutes").textContent = curMins + mins;
@@ -833,24 +901,15 @@
         document.getElementById("statBreaks").textContent = curBreaks + 1;
     }
 
-    // Called when timer completes normally (just add time)
     async function updateTaskStatsOnly(tid, mins) {
         try {
-            const ref = doc(db, "tasks", tid); // Assumes tasks are in root collection 'tasks' or handle via board update
-            // Note: Since tasks are inside 'boards' array in your structure, updating them requires reading the board, modifying the array, and writing back.
-            // However, your structure suggests tasks might be independent documents too? 
-            // If tasks are ONLY inside the board array, we must update the board document.
-            
-            // STRATEGY: Update the Board Document 'tasks' array.
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
                 if(!bSnap.exists()) return;
-                
                 const bData = bSnap.data();
                 const tasks = bData.tasks || [];
                 const taskIndex = tasks.findIndex(t => t.id === tid);
-                
                 if (taskIndex !== -1) {
                     const t = tasks[taskIndex];
                     t.pomodoro_count = (t.pomodoro_count || 0) + 1;
@@ -859,35 +918,28 @@
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
-        } catch (err) {
-            console.error("Error updating task stats:", err);
-        }
+        } catch (err) { console.error(err); }
     }
 
-    // Called when clicking "Complete Task"
     async function markTaskAsDone(tid, mins) {
         try {
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
                 if(!bSnap.exists()) return;
-                
                 const bData = bSnap.data();
                 const tasks = bData.tasks || [];
                 const taskIndex = tasks.findIndex(t => t.id === tid);
-                
                 if (taskIndex !== -1) {
                     const t = tasks[taskIndex];
-                    t.pomodoro_count = (t.pomodoro_count || 0) + 1; // Count partial as 1 effort
+                    t.pomodoro_count = (t.pomodoro_count || 0) + 1;
                     t.focus_minutes  = (t.focus_minutes || 0) + mins;
-                    t.status = "Done"; // MARK AS DONE
+                    t.status = "Done"; 
                     tasks[taskIndex] = t;
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
-        } catch (err) {
-            console.error("Error finishing task:", err);
-        }
+        } catch (err) { console.error(err); }
     }
 
     startBtn.onclick = startTimer;
@@ -905,6 +957,14 @@
             }
         };
     });
+
+    // Handle Slider Change
+    const intervalSlider  = document.getElementById("intervalSlider");
+    const intervalDisplay = document.getElementById("intervalDisplay");
+    intervalSlider.oninput = () => {
+        longBreakInterval = parseInt(intervalSlider.value);
+        intervalDisplay.textContent = `${longBreakInterval} Pomodoros`;
+    };
 
     const modal = document.getElementById("settingsModal");
     document.getElementById("openSettingsBtn").onclick  = () => modal.classList.add("open");
