@@ -15,7 +15,6 @@
             --bg-current: var(--bg-work);
             --card-dark: #1e293b;
             --text-white: #ffffff;
-            --text-muted: #94a3b8;
             --radius-main: 6px;
             --radius-card: 12px;
         }
@@ -43,13 +42,7 @@
             align-items: center;
         }
 
-        .logo {
-            font-size: 20px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
+        .logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
 
         .header-btn {
             background: rgba(255, 255, 255, 0.2);
@@ -84,6 +77,7 @@
             text-align: center;
             width: 100%;
             margin-bottom: 25px;
+            position: relative;
         }
 
         .timer-tabs {
@@ -115,6 +109,13 @@
             text-shadow: 0 4px 20px rgba(0,0,0,0.1);
         }
 
+        .controls-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            align-items: center;
+        }
+
         .start-btn {
             background: white;
             color: var(--bg-current);
@@ -124,12 +125,32 @@
             padding: 16px 40px;
             border-radius: 4px;
             cursor: pointer;
-            width: 200px;
+            width: 180px;
             text-transform: uppercase;
             box-shadow: 0 6px 0 rgb(235, 235, 235);
             transition: color 0.4s ease, transform 0.1s, box-shadow 0.1s;
         }
         .start-btn:active { transform: translateY(4px); box-shadow: none; }
+
+        /* New Finish Button */
+        .finish-btn {
+            background: transparent;
+            border: 2px solid rgba(255,255,255,0.4);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .finish-btn:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: white;
+        }
 
         .current-task-section { width: 100%; text-align: center; }
         .task-label {
@@ -163,6 +184,7 @@
             text-align: left;
         }
 
+        /* Modal Styles */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -195,13 +217,7 @@
             margin-bottom: 15px;
             color: #ddd;
         }
-        .close-btn {
-            background: none;
-            border: none;
-            color: #aaa;
-            font-size: 24px;
-            cursor: pointer;
-        }
+        .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
 
         .dark-card {
             background: var(--card-dark);
@@ -349,13 +365,18 @@
 
         <div class="time-big" id="timeDisplay">25:00</div>
 
-        <button class="start-btn" id="startBtn">START</button>
+        <div class="controls-row">
+            <button class="start-btn" id="startBtn">START</button>
+            <button class="finish-btn" id="finishTaskBtn" title="Complete Task & Finish Early" style="display:none;">
+                ✔
+            </button>
+        </div>
     </div>
 
     <div class="current-task-section">
         <div class="task-label">Currently Focusing On</div>
         <select class="main-task-select" id="focusTaskSelect">
-            <option value="">(No Task Selected)</option>
+            <option value="">(Select a Task to Start)</option>
             <option value="" disabled>Loading tasks...</option>
         </select>
     </div>
@@ -468,11 +489,9 @@
     const params   = new URLSearchParams(window.location.search);
     const userId   = params.get("userId")   || "demo-user";
     const userName = params.get("userName") || "User";
-    const boardId  = params.get("boardId")  || userId;   // fallback = personal board
+    const boardId  = params.get("boardId")  || userId;
 
     document.getElementById("userLabel").textContent = userName;
-
-    console.log("[FocusHub] init params =>", { userId, userName, boardId });
 
     let currentMode = "work";
     let remainingSeconds = 25 * 60;
@@ -492,13 +511,12 @@
     const root        = document.documentElement;
     const timeDisplay = document.getElementById("timeDisplay");
     const startBtn    = document.getElementById("startBtn");
+    const finishBtn   = document.getElementById("finishTaskBtn");
     const taskSelect  = document.getElementById("focusTaskSelect");
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function getVolume() {
-        return document.getElementById("volumeSlider").value / 100;
-    }
+    function getVolume() { return document.getElementById("volumeSlider").value / 100; }
 
     function playSound(type) {
         if (audioCtx.state === "suspended") audioCtx.resume();
@@ -509,7 +527,6 @@
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-
         const now = audioCtx.currentTime;
 
         if (type === "bell") {
@@ -540,7 +557,6 @@
     function startTicking() {
         if (tickInterval) clearInterval(tickInterval);
         if (!document.getElementById("tickToggle").checked) return;
-
         tickInterval = setInterval(() => {
             const vol = getVolume() * 0.3;
             if (vol > 0.01) {
@@ -607,25 +623,44 @@
         );
         stopTimer();
         updateTimeDisplay();
+        
+        // Hide finish button if not in work mode
+        if(currentMode !== 'work') {
+            finishBtn.style.display = 'none';
+        } else if (timerInterval && taskSelect.value) {
+            finishBtn.style.display = 'flex';
+        }
     }
 
     function updateTimeDisplay() {
         const m = Math.floor(remainingSeconds / 60);
         const s = remainingSeconds % 60;
-        timeDisplay.textContent =
-            `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-        document.title =
-            `${timeDisplay.textContent} - ${currentMode === "work" ? "Focus" : "Break"}`;
+        timeDisplay.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        document.title = `${timeDisplay.textContent} - Focus Hub`;
     }
 
     function startTimer() {
+        // 1. REQ: Only start if task is selected (when in work mode)
+        if (currentMode === "work" && !taskSelect.value) {
+            alert("Please select a task from the list below to start focusing.");
+            return;
+        }
+
         if (timerInterval) {
+            // Pausing
             stopTimer();
             return;
         }
+        
+        // Starting
         startBtn.textContent = "PAUSE";
         startBtn.style.boxShadow = "none";
         startBtn.style.transform = "translateY(4px)";
+
+        // Show finish button only in work mode
+        if (currentMode === "work") {
+            finishBtn.style.display = 'flex';
+        }
 
         if (document.getElementById("tickToggle").checked) startTicking();
 
@@ -643,7 +678,35 @@
         startBtn.textContent = "START";
         startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
         startBtn.style.transform = "translateY(0)";
+        finishBtn.style.display = 'none'; // Hide finish button when paused/stopped
     }
+
+    // 2. REQ: Finish Task Early logic
+    finishBtn.onclick = async () => {
+        if (!confirm("Are you sure you want to complete this task now? The time spent so far will be recorded.")) return;
+
+        stopTimer();
+        playSound('digital'); // Success sound
+
+        // Calculate time spent (Total - Remaining)
+        const totalSeconds = durations.work * 60;
+        const elapsedSeconds = totalSeconds - remainingSeconds;
+        const minsSpent = Math.max(1, Math.round(elapsedSeconds / 60)); // Record at least 1 min
+
+        console.log(`[FocusHub] Task finished early. Time spent: ${minsSpent} mins`);
+
+        const tid = taskSelect.value;
+        if (tid) {
+            await updateStats(minsSpent); // Add to daily total
+            await markTaskAsDone(tid, minsSpent); // Mark done & add time
+        }
+
+        // Reset and reload
+        remainingSeconds = durations.work * 60;
+        updateTimeDisplay();
+        alert(`Great job! Task completed. ${minsSpent} minutes recorded.`);
+        await loadBoardTasksIntoDropdown(); // Refresh list to remove done task
+    };
 
     async function completeTimer() {
         stopTimer();
@@ -653,7 +716,7 @@
             const mins = durations.work;
             await updateStats(mins);
             const tid = taskSelect.value;
-            if (tid) await updateTaskStats(tid, mins);
+            if (tid) await updateTaskStatsOnly(tid, mins); // Add time, but don't mark done automatically
         } else {
             await updateBreakStats();
         }
@@ -661,9 +724,16 @@
         if (document.getElementById("autoSwitchToggle").checked) {
             const next = currentMode === "work" ? "short" : "work";
             switchMode(next);
-            startTimer();
+            // If switching to work, check for task again
+            if (next === 'work' && !taskSelect.value) {
+                // Do not auto-start if no task
+            } else {
+                startTimer();
+            }
         }
     }
+
+    // --- Firebase Logic ---
 
     async function loadUserStats() {
         try {
@@ -684,21 +754,13 @@
                     today_focus_minutes: 0,
                     breaks_today: 0
                 });
-                data = {
-                    ...data,
-                    today_pomodoros: 0,
-                    today_focus_minutes: 0,
-                    breaks_today: 0
-                };
+                data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
             }
 
             userStatsDocCache = ref;
-            document.getElementById("statPomosToday").textContent =
-                data.today_pomodoros || 0;
-            document.getElementById("statFocusMinutes").textContent =
-                data.today_focus_minutes || 0;
-            document.getElementById("statBreaks").textContent =
-                data.breaks_today || 0;
+            document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
+            document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
+            document.getElementById("statBreaks").textContent = data.breaks_today || 0;
 
             document.getElementById("waterToggle").checked   = !!data.water_reminder;
             document.getElementById("stretchToggle").checked = !!data.stretch_reminder;
@@ -709,24 +771,21 @@
 
     async function loadBoardTasksIntoDropdown() {
         try {
-            console.log("[FocusHub] Loading board:", boardId);
             const boardRef = doc(db, "boards", boardId);
             const snap = await getDoc(boardRef);
 
-            if (!snap.exists()) {
-                console.warn("[FocusHub] Board not found:", boardId);
-                taskSelect.innerHTML =
-                    '<option value="">(No Task Selected)</option>' +
-                    '<option value="" disabled>No board data found</option>';
-                return;
-            }
+            taskSelect.innerHTML = "";
+            const baseOpt = document.createElement("option");
+            baseOpt.value = "";
+            baseOpt.textContent = "(Select a Task to Start)";
+            taskSelect.appendChild(baseOpt);
+
+            if (!snap.exists()) return;
 
             const board = snap.data();
-            console.log("[FocusHub] Board data:", board);
-
-            const projects   = Array.isArray(board.projects)   ? board.projects   : [];
-            const workspaces = Array.isArray(board.workspaces) ? board.workspaces : [];
-            const tasks      = Array.isArray(board.tasks)      ? board.tasks      : [];
+            const projects    = Array.isArray(board.projects)    ? board.projects    : [];
+            const workspaces  = Array.isArray(board.workspaces)  ? board.workspaces  : [];
+            const tasks       = Array.isArray(board.tasks)       ? board.tasks       : [];
 
             const projectById = {};
             projects.forEach(p => { projectById[p.id] = p; });
@@ -734,91 +793,100 @@
             const workspaceById = {};
             workspaces.forEach(w => { workspaceById[w.id] = w; });
 
-            console.log("[FocusHub] projects:", projects);
-            console.log("[FocusHub] workspaces:", workspaces);
-            console.log("[FocusHub] tasks:", tasks);
-
-            // show all tasks except status = Done
-            const openTasks = tasks.filter(t =>
-                (t.status || "").toLowerCase() !== "done"
-            );
-            console.log("[FocusHub] openTasks:", openTasks);
-
-            taskSelect.innerHTML = "";
-            const baseOpt = document.createElement("option");
-            baseOpt.value = "";
-            baseOpt.textContent = "(No Task Selected)";
-            taskSelect.appendChild(baseOpt);
-
-            if (openTasks.length === 0) {
-                const opt = document.createElement("option");
-                opt.value = "";
-                opt.disabled = true;
-                opt.textContent = "No open tasks on this board";
-                taskSelect.appendChild(opt);
-                return;
-            }
+            const openTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
 
             openTasks.forEach(t => {
                 const project   = projectById[t.projectId];
-                const workspace = project ? workspaceById[project.workspaceId] : null;
+                // 3. REQ: Filter out Unknown Projects/Workspaces
+                if (!project) return; 
 
-                const projectName   = project ? project.name   : "Unknown project";
-                const workspaceName = workspace ? workspace.name : "Unknown workspace";
+                const workspace = workspaceById[project.workspaceId];
+                if (!workspace) return;
 
                 const opt = document.createElement("option");
                 opt.value = t.id;
-                opt.textContent =
-                    `${t.name} - ${workspaceName} - ${projectName}`;
+                opt.textContent = `${t.name} • ${project.name}`; // Clean Format
                 taskSelect.appendChild(opt);
             });
         } catch (err) {
-            console.error("[FocusHub] Error loading tasks from board:", err);
-            taskSelect.innerHTML =
-                '<option value="">(No Task Selected)</option>' +
-                '<option value="" disabled>Error loading tasks</option>';
+            console.error("[FocusHub] Error:", err);
         }
     }
 
     async function updateStats(mins) {
-        try {
-            if (!userStatsDocCache) return;
-            await updateDoc(userStatsDocCache, {
-                today_pomodoros: increment(1),
-                today_focus_minutes: increment(mins)
-            });
-        } catch (err) {
-            console.error("[FocusHub] Error updating stats:", err);
-        }
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, {
+            today_pomodoros: increment(1),
+            today_focus_minutes: increment(mins)
+        });
+        // Update UI immediately
+        const curMins = parseInt(document.getElementById("statFocusMinutes").textContent) || 0;
+        const curPomo = parseInt(document.getElementById("statPomosToday").textContent) || 0;
+        document.getElementById("statFocusMinutes").textContent = curMins + mins;
+        document.getElementById("statPomosToday").textContent = curPomo + 1;
     }
 
     async function updateBreakStats() {
-        try {
-            if (!userStatsDocCache) return;
-            await updateDoc(userStatsDocCache, {
-                breaks_today: increment(1)
-            });
-        } catch (err) {
-            console.error("[FocusHub] Error updating break stats:", err);
-        }
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
+        const curBreaks = parseInt(document.getElementById("statBreaks").textContent) || 0;
+        document.getElementById("statBreaks").textContent = curBreaks + 1;
     }
 
-    async function updateTaskStats(tid, mins) {
+    // Called when timer completes normally (just add time)
+    async function updateTaskStatsOnly(tid, mins) {
         try {
-            // optional – only if you still keep separate "tasks" collection
-            const ref = doc(db, "tasks", tid);
+            const ref = doc(db, "tasks", tid); // Assumes tasks are in root collection 'tasks' or handle via board update
+            // Note: Since tasks are inside 'boards' array in your structure, updating them requires reading the board, modifying the array, and writing back.
+            // However, your structure suggests tasks might be independent documents too? 
+            // If tasks are ONLY inside the board array, we must update the board document.
+            
+            // STRATEGY: Update the Board Document 'tasks' array.
+            const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
-                const s = await tx.get(ref);
-                if (s.exists()) {
-                    const d = s.data();
-                    tx.update(ref, {
-                        pomodoro_count: (d.pomodoro_count || 0) + 1,
-                        focus_minutes:  (d.focus_minutes  || 0) + mins
-                    });
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                
+                const bData = bSnap.data();
+                const tasks = bData.tasks || [];
+                const taskIndex = tasks.findIndex(t => t.id === tid);
+                
+                if (taskIndex !== -1) {
+                    const t = tasks[taskIndex];
+                    t.pomodoro_count = (t.pomodoro_count || 0) + 1;
+                    t.focus_minutes  = (t.focus_minutes || 0) + mins;
+                    tasks[taskIndex] = t;
+                    tx.update(boardRef, { tasks: tasks });
                 }
             });
         } catch (err) {
-            console.warn("[FocusHub] Could not update stats in tasks collection:", err);
+            console.error("Error updating task stats:", err);
+        }
+    }
+
+    // Called when clicking "Complete Task"
+    async function markTaskAsDone(tid, mins) {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                
+                const bData = bSnap.data();
+                const tasks = bData.tasks || [];
+                const taskIndex = tasks.findIndex(t => t.id === tid);
+                
+                if (taskIndex !== -1) {
+                    const t = tasks[taskIndex];
+                    t.pomodoro_count = (t.pomodoro_count || 0) + 1; // Count partial as 1 effort
+                    t.focus_minutes  = (t.focus_minutes || 0) + mins;
+                    t.status = "Done"; // MARK AS DONE
+                    tasks[taskIndex] = t;
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+        } catch (err) {
+            console.error("Error finishing task:", err);
         }
     }
 
