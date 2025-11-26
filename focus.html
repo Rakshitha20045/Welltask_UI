@@ -53,6 +53,7 @@
         .start-btn:active { transform: translateY(4px); box-shadow: none; }
         .finish-btn { background: transparent; border: 2px solid rgba(255,255,255,0.4); color: white; width: 50px; height: 50px; border-radius: 8px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         .finish-btn:hover { background: rgba(255,255,255,0.2); border-color: white; }
+        
         .current-task-section { width: 100%; text-align: center; position: relative;}
         .task-controls { display: flex; gap: 10px; justify-content: center; align-items: center; width: 100%; }
         .task-label { font-size: 14px; opacity: 0.8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
@@ -63,6 +64,7 @@
             text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
         }
         .main-task-select option { background: var(--card-dark); color: white; text-align: left; }
+        
         .restore-btn {
             background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
             color: #ddd; width: 45px; height: 45px; border-radius: 8px;
@@ -87,9 +89,6 @@
         .time-filter-row { display:flex; gap:8px; margin-bottom:15px; justify-content: center; }
         .time-filter-btn { background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#ccc; padding: 6px 14px; border-radius: 20px; font-size:12px; cursor:pointer; transition: all 0.2s; }
         .time-filter-btn.active { background: #4ade80; color: #0f172a; font-weight:700; border-color:#4ade80; }
-        .date-nav-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background:rgba(255,255,255,0.05); padding:8px; border-radius:8px; }
-        .date-nav-btn { background:none; border:none; color:#4ade80; font-size:18px; cursor:pointer; padding:0 10px; font-weight:bold; }
-        .date-display { color:white; font-size:14px; font-weight:600; }
         .report-summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
         .summary-card { flex: 1; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center; }
         .sum-val { font-size: 20px; font-weight: 700; color: #4ade80; }
@@ -101,7 +100,11 @@
         .rank-bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.1); margin: 0 15px; border-radius: 3px; overflow: hidden; }
         .rank-bar-fill { height: 100%; background: #4ade80; }
         .rank-time { font-size: 12px; color: #94a3b8; min-width: 45px; text-align: right; }
-        .restore-list-btn { background: none; border: 1px solid #4ade80; color: #4ade80; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: 0.2s; }
+        
+        .restore-list-btn {
+            background: none; border: 1px solid #4ade80; color: #4ade80; padding: 4px 10px;
+            border-radius: 4px; font-size: 11px; cursor: pointer; transition: 0.2s;
+        }
         .restore-list-btn:hover { background: #4ade80; color: #0f172a; }
 
         /* Break Modal */
@@ -276,19 +279,13 @@
             </div>
 
             <div id="viewTask" style="display:none;">
-                <div class="date-nav-row">
-                    <button class="date-nav-btn" onclick="shiftTaskDate(-1)">❮</button>
-                    <span class="date-display" id="taskDateDisplay">Today</span>
-                    <button class="date-nav-btn" onclick="shiftTaskDate(1)">❯</button>
-                </div>
-                
-                <div class="card-title">Daily Task Breakdown</div>
+                <div class="card-title">Total Time Distribution</div>
                 <div class="chart-container" style="height:200px; margin-bottom:20px;">
                     <canvas id="taskChart"></canvas>
                 </div>
-                <div class="card-title">Task Ranking (Selected Date)</div>
+                <div class="card-title">Task Ranking (By Focus Time)</div>
                 <ul class="ranking-list" id="rankingList">
-                    <li class="ranking-item" style="color:#aaa; text-align:center;">Loading data...</li>
+                    <li class="ranking-item" style="color:#aaa; text-align:center;">No data available</li>
                 </ul>
             </div>
         </div>
@@ -321,9 +318,6 @@
 
     let currentMode = "work";
     let durations = { work: 25, short: 5, long: 15 };
-    // NEW: Track the intended session time specifically
-    let currentSessionTarget = 25; 
-    
     let remainingSeconds = 25 * 60;
     let timerInterval = null;
     let tickInterval = null;
@@ -334,7 +328,6 @@
     let activityChartInstance = null;
     let taskChartInstance = null;
     let cachedTasks = [];
-    let currentReportDate = new Date();
 
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
@@ -347,6 +340,7 @@
     };
     let activeTheme = "teal";
 
+    // DOM Elements
     const root = document.documentElement;
     const timeDisplay = document.getElementById("timeDisplay");
     const startBtn = document.getElementById("startBtn");
@@ -361,6 +355,7 @@
         const vol = getVolume();
         if (vol <= 0.01) return;
         const now = audioCtx.currentTime;
+        
         const playTone = (freq, wavetype, start, dur) => {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -411,8 +406,6 @@
         stopTimer();
         currentMode = mode;
         remainingSeconds = durations[mode] * 60;
-        currentSessionTarget = durations[mode]; // Sync target with mode duration
-        
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
         document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
         applyTheme(activeTheme);
@@ -460,23 +453,22 @@
         if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
         stopTimer();
         playSound('digital');
-        
-        // Fix: Calculate using the Current Session Target, NOT duration.work
-        const totalSeconds = currentSessionTarget * 60;
+        const totalSeconds = durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
         const minsSpent = Math.ceil(elapsedSeconds / 60);
-        
         const tid = taskSelect.value;
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
+            // NEW: Log Daily
             await logDailyTaskWork(tid, minsSpent);
         }
-        // Reset logic
         remainingSeconds = durations.work * 60; 
-        currentSessionTarget = durations.work;
         updateTimeDisplay();
-        
+        // Don't reload entire board, just remove local option to be fast
+        // await loadBoardTasksIntoDropdown(); 
+        // But wait, we need to ensure it vanishes from DB view.
+        // Let's rely on re-load for safety.
         await loadBoardTasksIntoDropdown();
         showBreakDecisionModal();
     };
@@ -484,8 +476,7 @@
     async function completeTimer() {
         stopTimer();
         if (currentMode === "work") {
-            // Fix: Use Session Target (allows 1 min, 5 min, etc)
-            const mins = currentSessionTarget;
+            const mins = durations.work;
             pomodoroCycleCount++;
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
@@ -512,28 +503,19 @@
     }
 
     window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); }
-    
     window.handleBreakDecision = function(decision) {
         document.getElementById("breakModal").classList.remove("open");
-        
         if (decision === 'take') {
             currentStreak++; updateStreakUI();
             let nextMode = "short";
             if (pomodoroCycleCount >= longBreakInterval) { nextMode = "long"; pomodoroCycleCount = 0; }
             switchMode(nextMode); startTimer(); 
-            
         } else if (decision === 'skip') {
             if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
             currentStreak = 0; updateStreakUI();
             switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer();
-            
         } else if (decision === 'remind') {
-            currentMode = 'work'; 
-            remainingSeconds = 5 * 60; 
-            // Fix: Explicitly tell system this is a 5m session
-            currentSessionTarget = 5; 
-            updateTimeDisplay(); 
-            startTimer();
+            currentMode = 'work'; remainingSeconds = 5 * 60; updateTimeDisplay(); startTimer();
         }
     }
 
@@ -581,14 +563,18 @@
                 const tasks = bSnap.data().tasks;
                 const idx = tasks.findIndex(t => t.id === tid);
                 if(idx > -1) {
-                    tasks[idx].status = "Todo"; 
+                    tasks[idx].status = "Todo"; // Set back to todo
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
+            // Refresh UI
             await loadBoardTasksIntoDropdown();
-            loadCompletedTasks(); 
-            alert("Task Restored!");
-        } catch(e) { console.error("Restore failed:", e); }
+            loadCompletedTasks(); // Refresh list inside modal
+            alert("Task Restored! It's back in your dropdown.");
+        } catch(e) {
+            console.error("Restore failed:", e);
+            alert("Failed to restore task.");
+        }
     }
 
     // --- REPORTING SYSTEM ---
@@ -598,11 +584,7 @@
         document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
         document.getElementById('tabTask').classList.toggle('active', tabName === 'task');
         if(tabName === 'activity') updateReportPeriod('daily');
-        if(tabName === 'task') {
-            currentReportDate = new Date();
-            updateTaskDateDisplay();
-            generateDailyTaskChart(); 
-        }
+        if(tabName === 'task') generateTaskChart(); 
     }
 
     window.updateReportPeriod = function(period) {
@@ -642,73 +624,43 @@
         });
     }
 
-    // --- TASK CHART (DAILY) ---
-    window.shiftTaskDate = function(days) {
-        currentReportDate.setDate(currentReportDate.getDate() + days);
-        updateTaskDateDisplay();
-        generateDailyTaskChart();
-    }
-
-    function updateTaskDateDisplay() {
-        const today = new Date();
-        const isToday = currentReportDate.toDateString() === today.toDateString();
-        const dateStr = currentReportDate.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
-        document.getElementById("taskDateDisplay").textContent = isToday ? `Today (${dateStr})` : dateStr;
-    }
-
-    async function generateDailyTaskChart() {
-        const dateStr = currentReportDate.toISOString().slice(0, 10);
+    // --- TASK CHART (NO BUTTONS, TOTAL ONLY) ---
+    function generateTaskChart() {
+        const labels = [];
+        const data = [];
+        const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
         const rankList = document.getElementById("rankingList");
-        rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#aaa;">Loading...</li>';
+        rankList.innerHTML = "";
+        
+        const sorted = [...cachedTasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
 
-        try {
-            const logRef = doc(db, "boards", boardId, "daily_logs", dateStr);
-            const snap = await getDoc(logRef);
-            
-            const labels = [];
-            const data = [];
-            const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
-            rankList.innerHTML = "";
-
-            if (snap.exists()) {
-                const logData = snap.data();
-                const taskEntries = Object.entries(logData).map(([tid, mins]) => {
-                    const tObj = cachedTasks.find(t => t.id === tid);
-                    const name = tObj ? tObj.name : "Unknown Task";
-                    return { name, mins };
-                }).sort((a,b) => b.mins - a.mins);
-
-                taskEntries.forEach(t => {
-                    labels.push(t.name);
-                    data.push(t.mins);
-                    const li = document.createElement("li");
-                    li.className = "ranking-item";
-                    li.innerHTML = `
-                        <span class="rank-name" title="${t.name}">${t.name}</span>
-                        <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.mins*2)}%"></div></div>
-                        <span class="rank-time">${t.mins}m</span>
-                    `;
-                    rankList.appendChild(li);
-                });
-            } 
-
-            if (data.length === 0) {
-                rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No activity recorded for this date.</li>';
+        sorted.forEach((t) => {
+            if((t.focus_minutes || 0) > 0) {
+                labels.push(t.name);
+                data.push(t.focus_minutes); 
+                
+                const li = document.createElement("li");
+                li.className = "ranking-item";
+                const statusIcon = t.status === 'Done' ? '✅ ' : '';
+                li.innerHTML = `
+                    <span class="rank-name" title="${t.name}">${statusIcon}${t.name}</span>
+                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.focus_minutes)}%"></div></div>
+                    <span class="rank-time">${t.focus_minutes}m</span>
+                `;
+                rankList.appendChild(li);
             }
+        });
 
-            const ctx = document.getElementById('taskChart').getContext('2d');
-            if (taskChartInstance) taskChartInstance.destroy();
+        if (data.length === 0) rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No tasks focused yet.</li>';
 
-            taskChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', boxWidth: 10, font: {size: 10} } } } }
-            });
+        const ctx = document.getElementById('taskChart').getContext('2d');
+        if (taskChartInstance) taskChartInstance.destroy();
 
-        } catch(e) {
-            console.error("Error fetching daily log:", e);
-            rankList.innerHTML = '<li class="ranking-item" style="color:red;">Error loading data</li>';
-        }
+        taskChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', boxWidth: 10, font: {size: 10} } } } }
+        });
     }
 
     async function init() {
@@ -721,12 +673,7 @@
         ['work', 'short', 'long'].forEach(mode => {
             document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
                 durations[mode] = parseInt(e.target.value) || 1;
-                if(currentMode === mode && !timerInterval) { 
-                    // Fix: Update target if setting changes while inactive
-                    currentSessionTarget = durations[mode];
-                    remainingSeconds = durations[mode] * 60; 
-                    updateTimeDisplay(); 
-                }
+                if(currentMode === mode && !timerInterval) { remainingSeconds = durations[mode] * 60; updateTimeDisplay(); }
             });
         });
         document.getElementById("intervalSlider").addEventListener('input', (e) => {
@@ -777,7 +724,10 @@
                 if (!project) return;
                 const opt = document.createElement("option");
                 opt.value = t.id;
-                opt.textContent = `${t.name} • ${project.name}`;
+                const projName = project.name || "Unknown";
+                // Safe Truncate for UI
+                const dispName = t.name.length > 25 ? t.name.substring(0,25) + "..." : t.name;
+                opt.textContent = `${dispName} • ${projName}`;
                 taskSelect.appendChild(opt);
             });
         } catch (err) { console.error(err); }
@@ -829,7 +779,10 @@
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
-        } catch(e) { console.error(e); alert("Failed to mark as done. Please check your connection."); }
+        } catch(e) { 
+            console.error(e); 
+            alert("Failed to mark as done. Please check your connection.");
+        }
     }
 
     function applyTheme(name) {
