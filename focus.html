@@ -305,7 +305,6 @@
     };
     let activeTheme = "teal";
 
-    // DOM Elements
     const root = document.documentElement;
     const timeDisplay = document.getElementById("timeDisplay");
     const startBtn = document.getElementById("startBtn");
@@ -414,8 +413,9 @@
         finishBtn.style.display = 'none';
     }
 
+    // --- FINISH TASK LOGIC ---
     finishBtn.onclick = async () => {
-        if (!confirm("Complete task early?")) return;
+        if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
         stopTimer();
         playSound('digital');
         const totalSeconds = durations.work * 60;
@@ -429,7 +429,7 @@
         remainingSeconds = durations.work * 60; 
         updateTimeDisplay();
         await loadBoardTasksIntoDropdown();
-        showBreakDecisionModal();
+        showBreakDecisionModal(); // Still show break modal even if done
     };
 
     async function completeTimer() {
@@ -440,7 +440,7 @@
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
             const tid = taskSelect.value;
-            if (tid) await updateTaskStatsOnly(tid, mins);
+            if (tid) await updateTaskStatsOnly(tid, mins); // Only updates time, NOT status
             showBreakDecisionModal();
         } else {
             playSound(document.getElementById("breakSoundType").value);
@@ -479,7 +479,7 @@
         document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
         document.getElementById('tabTask').classList.toggle('active', tabName === 'task');
         if(tabName === 'activity') updateReportPeriod('daily');
-        if(tabName === 'task') generateTaskChart(); // Direct call
+        if(tabName === 'task') generateTaskChart(); 
     }
 
     window.updateReportPeriod = function(period) {
@@ -515,4 +515,182 @@
         activityChartInstance = new Chart(ctx, {
             type: type,
             data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: '#4ade80', borderColor: '#4ade80', tension: 0.1, borderRadius: 4 }] },
-            options: {
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+        });
+    }
+
+    // --- TASK CHART (NO BUTTONS, TOTAL ONLY) ---
+    function generateTaskChart() {
+        const labels = [];
+        const data = [];
+        const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
+        const rankList = document.getElementById("rankingList");
+        rankList.innerHTML = "";
+        
+        const sorted = [...cachedTasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
+
+        sorted.forEach((t) => {
+            if((t.focus_minutes || 0) > 0) {
+                labels.push(t.name);
+                data.push(t.focus_minutes); 
+                
+                const li = document.createElement("li");
+                li.className = "ranking-item";
+                const statusIcon = t.status === 'Done' ? '✅ ' : '';
+                li.innerHTML = `
+                    <span class="rank-name" title="${t.name}">${statusIcon}${t.name}</span>
+                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.focus_minutes)}%"></div></div>
+                    <span class="rank-time">${t.focus_minutes}m</span>
+                `;
+                rankList.appendChild(li);
+            }
+        });
+
+        if (data.length === 0) rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No tasks focused yet.</li>';
+
+        const ctx = document.getElementById('taskChart').getContext('2d');
+        if (taskChartInstance) taskChartInstance.destroy();
+
+        taskChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', boxWidth: 10, font: {size: 10} } } } }
+        });
+    }
+
+    async function init() {
+        updateTimeDisplay();
+        await loadUserStats();
+        await loadBoardTasksIntoDropdown();
+        applyTheme(activeTheme);
+        document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        
+        ['work', 'short', 'long'].forEach(mode => {
+            document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
+                durations[mode] = parseInt(e.target.value) || 1;
+                if(currentMode === mode && !timerInterval) { remainingSeconds = durations[mode] * 60; updateTimeDisplay(); }
+            });
+        });
+        document.getElementById("intervalSlider").addEventListener('input', (e) => {
+             longBreakInterval = parseInt(e.target.value); document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        });
+        document.querySelectorAll(".test-btn").forEach(btn => {
+            btn.onclick = () => playSound(document.getElementById(btn.dataset.target).value);
+        });
+    }
+
+    async function loadUserStats() {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const ref = doc(db, "users", userId);
+            let snap = await getDoc(ref);
+            if (!snap.exists()) { await setDoc(ref, { today_date: today }); snap = await getDoc(ref); }
+            let data = snap.data();
+            if (data.today_date !== today) {
+                await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
+                data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
+            }
+            userStatsDocCache = ref;
+            currentStreak = data.current_streak || 0;
+            updateStreakUI();
+            document.getElementById("repPomos").textContent = data.today_pomodoros || 0;
+            document.getElementById("repMinutes").textContent = data.today_focus_minutes || 0;
+            document.getElementById("repBreaks").textContent = data.breaks_today || 0;
+        } catch (err) { console.error(err); }
+    }
+
+    async function loadBoardTasksIntoDropdown() {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            const snap = await getDoc(boardRef);
+            if (!snap.exists()) return;
+            const bData = snap.data();
+            const tasks = bData.tasks || [];
+            cachedTasks = tasks;
+            const projects = bData.projects || [];
+            const projectById = {};
+            projects.forEach(p => projectById[p.id] = p);
+            taskSelect.innerHTML = '<option value="">(Select a Task to Start)</option>';
+            const openTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
+            openTasks.forEach(t => {
+                const project = projectById[t.projectId];
+                if (!project) return;
+                const opt = document.createElement("option");
+                opt.value = t.id;
+                opt.textContent = `${t.name} • ${project.name}`;
+                taskSelect.appendChild(opt);
+            });
+        } catch (err) { console.error(err); }
+    }
+    
+    async function updateStats(mins) {
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, { today_pomodoros: increment(1), today_focus_minutes: increment(mins), current_streak: currentStreak });
+        const minsEl = document.getElementById("repMinutes"); const pomoEl = document.getElementById("repPomos");
+        minsEl.textContent = parseInt(minsEl.textContent) + mins; pomoEl.textContent = parseInt(pomoEl.textContent) + 1;
+    }
+
+    async function updateBreakStats() {
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
+        const brkEl = document.getElementById("repBreaks"); brkEl.textContent = parseInt(brkEl.textContent) + 1;
+    }
+
+    async function updateTaskStatsOnly(tid, mins) {
+        const task = cachedTasks.find(t => t.id === tid);
+        if(task) { task.focus_minutes = (task.focus_minutes || 0) + mins; task.pomodoro_count = (task.pomodoro_count || 0) + 1; }
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                const tasks = bSnap.data().tasks;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
+                    tasks[idx].pomodoro_count = (tasks[idx].pomodoro_count || 0) + 1;
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+        } catch(e) { console.error(e); }
+    }
+    
+    async function markTaskAsDone(tid, mins) {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                const tasks = bSnap.data().tasks;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
+                    tasks[idx].status = "Done";
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+        } catch(e) { console.error(e); }
+    }
+
+    function applyTheme(name) {
+        activeTheme = name;
+        const t = themes[name];
+        root.style.setProperty("--bg-work",  t.work); root.style.setProperty("--bg-short", t.short); root.style.setProperty("--bg-long",  t.long);
+        let color = "var(--bg-work)";
+        if (currentMode === "short") color = "var(--bg-short)"; if (currentMode === "long")  color = "var(--bg-long)";
+        root.style.setProperty("--bg-current", color);
+        document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("selected", el.dataset.theme === name));
+    }
+    
+    const settingsModal = document.getElementById("settingsModal");
+    const reportModal = document.getElementById("reportModal");
+    document.getElementById("openSettingsBtn").onclick = () => settingsModal.classList.add("open");
+    document.getElementById("closeSettingsBtn").onclick = () => settingsModal.classList.remove("open");
+    document.getElementById("openReportBtn").onclick = () => { reportModal.classList.add("open"); switchReportTab('activity'); };
+    document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
+    document.querySelectorAll(".theme-swatch").forEach(s => s.onclick = () => applyTheme(s.dataset.theme));
+
+    init();
+</script>
+</body>
+</html>
