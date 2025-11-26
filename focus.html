@@ -265,9 +265,10 @@
 
             <div id="viewActivity">
                 <div class="time-filter-row">
-                    <button class="time-filter-btn active" onclick="updateReportPeriod('daily')">Daily</button>
-                    <button class="time-filter-btn" onclick="updateReportPeriod('weekly')">Weekly</button>
-                    <button class="time-filter-btn" onclick="updateReportPeriod('monthly')">Monthly</button>
+                    <!-- FIX: pass this to updateReportPeriod -->
+                    <button class="time-filter-btn active" onclick="updateReportPeriod('daily', this)">Daily</button>
+                    <button class="time-filter-btn" onclick="updateReportPeriod('weekly', this)">Weekly</button>
+                    <button class="time-filter-btn" onclick="updateReportPeriod('monthly', this)">Monthly</button>
                 </div>
                 <div class="report-summary-row">
                     <div class="summary-card"><div class="sum-val" id="repPomos">0</div><div class="sum-lbl">Pomodoros</div></div>
@@ -319,6 +320,9 @@
     let currentMode = "work";
     let durations = { work: 25, short: 5, long: 15 };
     let remainingSeconds = 25 * 60;
+    // NEW: track total seconds for the CURRENT session
+    let sessionTotalSeconds = remainingSeconds;
+
     let timerInterval = null;
     let tickInterval = null;
     let userStatsDocCache = null;
@@ -406,6 +410,9 @@
         stopTimer();
         currentMode = mode;
         remainingSeconds = durations[mode] * 60;
+        // NEW: reset session total when switching modes
+        sessionTotalSeconds = remainingSeconds;
+
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
         document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
         applyTheme(activeTheme);
@@ -453,22 +460,19 @@
         if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
         stopTimer();
         playSound('digital');
-        const totalSeconds = durations.work * 60;
+        const totalSeconds = sessionTotalSeconds || durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
-        const minsSpent = Math.ceil(elapsedSeconds / 60);
+        const minsSpent = Math.max(1, Math.ceil(elapsedSeconds / 60));
         const tid = taskSelect.value;
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
-            // NEW: Log Daily
             await logDailyTaskWork(tid, minsSpent);
         }
-        remainingSeconds = durations.work * 60; 
+        // Reset to full focus duration for next session
+        remainingSeconds = durations.work * 60;
+        sessionTotalSeconds = remainingSeconds;
         updateTimeDisplay();
-        // Don't reload entire board, just remove local option to be fast
-        // await loadBoardTasksIntoDropdown(); 
-        // But wait, we need to ensure it vanishes from DB view.
-        // Let's rely on re-load for safety.
         await loadBoardTasksIntoDropdown();
         showBreakDecisionModal();
     };
@@ -476,7 +480,11 @@
     async function completeTimer() {
         stopTimer();
         if (currentMode === "work") {
-            const mins = durations.work;
+            // NEW: compute actual elapsed time from this session
+            const total = sessionTotalSeconds || (durations.work * 60);
+            const elapsedSeconds = total - remainingSeconds;
+            const mins = Math.max(1, Math.round(elapsedSeconds / 60));
+
             pomodoroCycleCount++;
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
@@ -515,7 +523,12 @@
             currentStreak = 0; updateStreakUI();
             switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer();
         } else if (decision === 'remind') {
-            currentMode = 'work'; remainingSeconds = 5 * 60; updateTimeDisplay(); startTimer();
+            // NEW: treat this as a fresh 5-minute focus session
+            currentMode = 'work';
+            remainingSeconds = 5 * 60;
+            sessionTotalSeconds = 5 * 60;
+            updateTimeDisplay();
+            startTimer();
         }
     }
 
@@ -563,13 +576,12 @@
                 const tasks = bSnap.data().tasks;
                 const idx = tasks.findIndex(t => t.id === tid);
                 if(idx > -1) {
-                    tasks[idx].status = "Todo"; // Set back to todo
+                    tasks[idx].status = "Todo";
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
-            // Refresh UI
             await loadBoardTasksIntoDropdown();
-            loadCompletedTasks(); // Refresh list inside modal
+            loadCompletedTasks();
             alert("Task Restored! It's back in your dropdown.");
         } catch(e) {
             console.error("Restore failed:", e);
@@ -583,13 +595,14 @@
         document.getElementById('viewTask').style.display = tabName === 'task' ? 'block' : 'none';
         document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
         document.getElementById('tabTask').classList.toggle('active', tabName === 'task');
-        if(tabName === 'activity') updateReportPeriod('daily');
+        if(tabName === 'activity') updateReportPeriod('daily', document.querySelector('#viewActivity .time-filter-btn')); 
         if(tabName === 'task') generateTaskChart(); 
     }
 
-    window.updateReportPeriod = function(period) {
+    window.updateReportPeriod = function(period, btnEl) {
         document.querySelectorAll('#viewActivity .time-filter-btn').forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
+        if (btnEl) btnEl.classList.add('active');
+
         let labels = [], data = [];
         
         const todayMins = parseInt(document.getElementById("repMinutes").textContent) || 0;
@@ -673,7 +686,12 @@
         ['work', 'short', 'long'].forEach(mode => {
             document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
                 durations[mode] = parseInt(e.target.value) || 1;
-                if(currentMode === mode && !timerInterval) { remainingSeconds = durations[mode] * 60; updateTimeDisplay(); }
+                if(currentMode === mode && !timerInterval) {
+                    remainingSeconds = durations[mode] * 60;
+                    // NEW: keep session total in sync with changed duration
+                    sessionTotalSeconds = remainingSeconds;
+                    updateTimeDisplay();
+                }
             });
         });
         document.getElementById("intervalSlider").addEventListener('input', (e) => {
@@ -725,7 +743,6 @@
                 const opt = document.createElement("option");
                 opt.value = t.id;
                 const projName = project.name || "Unknown";
-                // Safe Truncate for UI
                 const dispName = t.name.length > 25 ? t.name.substring(0,25) + "..." : t.name;
                 opt.textContent = `${dispName} • ${projName}`;
                 taskSelect.appendChild(opt);
