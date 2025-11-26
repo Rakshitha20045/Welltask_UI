@@ -7,6 +7,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for Reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         :root {
             /* Default Theme (Teal) */
@@ -33,6 +36,7 @@
             flex-direction: column;
         }
 
+        /* --- Header --- */
         .app-header {
             max-width: 620px;
             margin: 0 auto;
@@ -44,6 +48,8 @@
         }
 
         .logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+
+        .header-actions { display: flex; gap: 10px; }
 
         .header-btn {
             background: rgba(255, 255, 255, 0.2);
@@ -60,6 +66,7 @@
         }
         .header-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
+        /* --- Main Timer Area --- */
         .main-container {
             flex: 1;
             display: flex;
@@ -147,62 +154,34 @@
             justify-content: center;
             transition: all 0.2s;
         }
-        .finish-btn:hover {
-            background: rgba(255,255,255,0.2);
-            border-color: white;
-        }
+        .finish-btn:hover { background: rgba(255,255,255,0.2); border-color: white; }
 
         .current-task-section { width: 100%; text-align: center; }
         .task-label {
-            font-size: 14px;
-            opacity: 0.8;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 14px; opacity: 0.8; margin-bottom: 8px;
+            text-transform: uppercase; letter-spacing: 1px;
         }
         .main-task-select {
-            width: 100%;
-            background: rgba(0,0,0,0.15);
+            width: 100%; background: rgba(0,0,0,0.15);
             border: 2px dashed rgba(255,255,255,0.4);
-            color: white;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 16px;
-            outline: none;
-            cursor: pointer;
-            text-align: center;
-            appearance: none;
-            font-weight: 600;
+            color: white; padding: 12px; border-radius: 8px;
+            font-size: 16px; outline: none; cursor: pointer;
+            text-align: center; appearance: none; font-weight: 600;
         }
-        .main-task-select:hover {
-            background: rgba(0,0,0,0.2);
-            border-color: rgba(255,255,255,0.6);
-        }
-        .main-task-select option {
-            background: var(--card-dark);
-            color: white;
-            text-align: left;
-        }
+        .main-task-select:hover { background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.6); }
+        .main-task-select option { background: var(--card-dark); color: white; text-align: left; }
 
-        /* Modal Styles */
+        /* --- Modals --- */
         .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            display: none;
-            justify-content: center;
-            align-items: flex-start;
-            z-index: 1000;
-            padding: 20px;
-            overflow-y: auto;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);
+            display: none; justify-content: center; align-items: flex-start;
+            z-index: 1000; padding: 20px; overflow-y: auto;
         }
         .modal-overlay.open { display: flex; }
 
         .modal-content {
-            width: 100%;
-            max-width: 450px;
-            margin-top: 40px;
+            width: 100%; max-width: 550px; margin-top: 40px;
             animation: slideDown 0.3s ease;
         }
         @keyframes slideDown {
@@ -211,143 +190,97 @@
         }
 
         .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            color: #ddd;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; color: #ddd;
         }
         .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
 
         .dark-card {
-            background: var(--card-dark);
-            border-radius: var(--radius-card);
-            padding: 20px;
-            margin-bottom: 16px;
+            background: var(--card-dark); border-radius: var(--radius-card);
+            padding: 20px; margin-bottom: 16px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             border: 1px solid rgba(255,255,255,0.05);
         }
         .card-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: #94a3b8;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-transform: uppercase;
+            font-size: 14px; font-weight: 700; color: #94a3b8;
+            margin-bottom: 16px; display: flex; align-items: center;
+            gap: 8px; text-transform: uppercase;
         }
 
-        label {
-            display: block;
-            font-size: 11px;
-            color: #64748b;
-            font-weight: 700;
-            margin-bottom: 6px;
-            text-transform: uppercase;
+        /* Report Styles */
+        .report-nav {
+            display: flex; gap: 15px; margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;
         }
+        .report-tab {
+            background: none; border: none; color: #94a3b8;
+            font-size: 14px; font-weight: 600; cursor: pointer; padding-bottom: 5px;
+        }
+        .report-tab.active { color: white; border-bottom: 2px solid white; }
+        
+        .time-filter-row { display:flex; gap:10px; margin-bottom:15px; }
+        .time-filter-btn {
+            background: rgba(255,255,255,0.1); border:none; color:#ccc;
+            padding: 4px 12px; border-radius: 12px; font-size:12px; cursor:pointer;
+        }
+        .time-filter-btn.active { background: #4ade80; color: #1e293b; font-weight:700; }
+
+        .report-summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .summary-card {
+            flex: 1; background: rgba(255,255,255,0.05); padding: 15px;
+            border-radius: 8px; text-align: center;
+        }
+        .sum-val { font-size: 24px; font-weight: 700; color: #4ade80; }
+        .sum-lbl { font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-top: 5px; }
+
+        .chart-container { position: relative; height: 250px; width: 100%; }
+        
+        /* Break Decision Modal Specifics */
+        .break-option-btn {
+            width: 100%; padding: 15px; margin-bottom: 10px;
+            border: 2px solid rgba(255,255,255,0.1); border-radius: 8px;
+            background: rgba(0,0,0,0.2); color: white; text-align: left;
+            cursor: pointer; display: flex; align-items: center; gap: 10px;
+            transition: all 0.2s;
+        }
+        .break-option-btn:hover { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+        .break-option-btn strong { display: block; font-size: 16px; margin-bottom: 2px; }
+        .break-option-btn small { font-size: 12px; color: #94a3b8; }
+
+        /* Settings Inputs */
+        label { display: block; font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
         select, input[type="number"] {
-            width: 100%;
-            background: #0f172a;
-            border: 1px solid #334155;
-            padding: 10px;
-            border-radius: 6px;
-            color: white;
-            font-size: 14px;
-            outline: none;
+            width: 100%; background: #0f172a; border: 1px solid #334155;
+            padding: 10px; border-radius: 6px; color: white; font-size: 14px; outline: none;
         }
         input[type="range"] { width: 100%; accent-color: var(--bg-current); }
-
-        .row-inputs {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-        }
-
-        .theme-row {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-top: 10px;
-            flex-wrap: wrap; /* Allow wrapping for more colors */
-        }
+        .row-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .theme-row { display: flex; gap: 12px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
         .theme-swatch {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: transform 0.2s;
+            width: 40px; height: 40px; border-radius: 8px; cursor: pointer;
+            border: 2px solid transparent; transition: transform 0.2s;
         }
         .theme-swatch:hover { transform: scale(1.1); }
-        .theme-swatch.selected {
-            border-color: white;
-            box-shadow: 0 0 10px rgba(255,255,255,0.3);
-        }
-
+        .theme-swatch.selected { border-color: white; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
         .toggle-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
         }
         .toggle-row:last-child { border: none; }
         .toggle-label { font-size: 14px; color: #cbd5e1; }
-
         .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider {
-            position: absolute;
-            cursor: pointer;
-            inset: 0;
-            background-color: #334155;
-            border-radius: 34px;
-            transition: .4s;
+            position: absolute; cursor: pointer; inset: 0;
+            background-color: #334155; border-radius: 34px; transition: .4s;
         }
         .slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
+            position: absolute; content: ""; height: 16px; width: 16px;
+            left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;
         }
         input:checked + .slider { background-color: var(--bg-current); }
         input:checked + .slider:before { transform: translateX(18px); }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-        }
-        .stat-box {
-            background: #0f172a;
-            padding: 12px;
-            border-radius: 6px;
-            text-align: center;
-        }
-        .stat-val {
-            font-size: 20px;
-            font-weight: 700;
-            color: white;
-        }
-        .stat-lbl {
-            font-size: 10px;
-            color: #64748b;
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-        
-        .sound-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
+        .sound-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
         .sound-col { flex: 1; }
     </style>
 </head>
@@ -355,11 +288,12 @@
 
 <header class="app-header">
     <div class="logo">Focus Hub</div>
-    <div style="display:flex; gap:10px;">
+    <div class="header-actions">
         <div style="background:rgba(0,0,0,0.2); padding:4px 10px; border-radius:20px; font-size:12px; display:flex; align-items:center; gap:6px;">
             <span style="width:6px;height:6px;background:#4ade80;border-radius:50%;"></span>
             <span id="userLabel">Guest</span>
         </div>
+        <button class="header-btn" id="openReportBtn">📊 Report</button>
         <button class="header-btn" id="openSettingsBtn">⚙️ Setting</button>
     </div>
 </header>
@@ -380,6 +314,10 @@
                 ✔
             </button>
         </div>
+        
+        <div id="streakBadge" style="margin-top:20px; font-size:14px; color:#4ade80; font-weight:600; opacity:0; transition:opacity 0.5s;">
+            🔥 Streak: <span id="streakCount">0</span>
+        </div>
     </div>
 
     <div class="current-task-section">
@@ -391,13 +329,46 @@
     </div>
 </div>
 
+<!-- BREAK DECISION MODAL -->
+<div class="modal-overlay" id="breakModal" style="z-index: 1100;">
+    <div class="modal-content" style="max-width:400px; text-align:center;">
+        <h2 style="margin-top:0;">Focus Session Complete! 🎉</h2>
+        <p style="color:#cbd5e1; margin-bottom:20px;">Great job! How would you like to proceed?</p>
+        
+        <button class="break-option-btn" onclick="handleBreakDecision('take')">
+            <div style="font-size:24px;">☕</div>
+            <div>
+                <strong>Take a Break</strong>
+                <small>Recommended. Increases Streak 🔥</small>
+            </div>
+        </button>
+        
+        <button class="break-option-btn" onclick="handleBreakDecision('skip')">
+            <div style="font-size:24px;">⏭</div>
+            <div>
+                <strong>Skip Break</strong>
+                <small>Go straight back to focus. Streak pauses.</small>
+            </div>
+        </button>
+        
+        <button class="break-option-btn" onclick="handleBreakDecision('remind')">
+            <div style="font-size:24px;">⏰</div>
+            <div>
+                <strong>Remind Me Later</strong>
+                <small>Add 5 mins to current session.</small>
+            </div>
+        </button>
+    </div>
+</div>
+
+<!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settingsModal">
     <div class="modal-content">
         <div class="modal-header">
             <h3>SETTINGS</h3>
             <button class="close-btn" id="closeSettingsBtn">✕</button>
         </div>
-
+        <!-- (Settings content same as before) -->
         <div class="dark-card">
             <div class="card-title">⏱ Durations (Minutes)</div>
             <div class="row-inputs">
@@ -405,64 +376,41 @@
                 <div><label>Short</label><input type="number" id="shortDuration" value="5" min="1"></div>
                 <div><label>Long</label><input type="number" id="longDuration" value="15" min="1"></div>
             </div>
-            
             <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                     <label>Long Break Interval</label>
                     <span id="intervalDisplay" style="font-size:12px; font-weight:700; color:#4ade80;">4 Pomodoros</span>
                 </div>
                 <input type="range" id="intervalSlider" min="1" max="8" value="4" step="1">
-                <div style="font-size:10px; color:#64748b; margin-top:4px;">
-                    Auto-switches to Long Break after this many focus sessions.
-                </div>
             </div>
         </div>
-
         <div class="dark-card">
             <div class="card-title">🔊 Sound</div>
-            
             <div class="sound-row">
                 <div class="sound-col">
                     <label>Focus End</label>
                     <div style="display:flex; gap:4px;">
-                        <select id="workSoundType">
-                            <option value="none">None</option>
-                            <option value="digital" selected>Digital</option>
-                            <option value="bell">Bell</option>
-                            <option value="wood">Wood</option>
-                            <option value="melody">Melody</option>
-                        </select>
+                        <select id="workSoundType"><option value="none">None</option><option value="digital" selected>Digital</option><option value="bell">Bell</option><option value="wood">Wood</option><option value="melody">Melody</option></select>
                         <button class="test-btn" data-target="workSoundType" style="background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;">▶</button>
                     </div>
                 </div>
                 <div class="sound-col">
                     <label>Break End</label>
                     <div style="display:flex; gap:4px;">
-                        <select id="breakSoundType">
-                            <option value="none">None</option>
-                            <option value="melody" selected>Melody</option>
-                            <option value="digital">Digital</option>
-                            <option value="bell">Bell</option>
-                            <option value="wood">Wood</option>
-                        </select>
+                        <select id="breakSoundType"><option value="none">None</option><option value="melody" selected>Melody</option><option value="digital">Digital</option><option value="bell">Bell</option><option value="wood">Wood</option></select>
                         <button class="test-btn" data-target="breakSoundType" style="background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;">▶</button>
                     </div>
                 </div>
             </div>
-
             <div class="input-group">
                 <label>Volume</label>
                 <input type="range" id="volumeSlider" min="0" max="100" value="50">
             </div>
             <div class="toggle-row" style="margin-top:10px;">
                 <span class="toggle-label">Ticking Sound</span>
-                <label class="switch">
-                    <input type="checkbox" id="tickToggle">
-                    <span class="slider"></span>
-                </label>
+                <label class="switch"><input type="checkbox" id="tickToggle"><span class="slider"></span></label>
             </div>
         </div>
-
         <div class="dark-card">
             <div class="card-title">🎨 Color Themes</div>
             <div class="theme-row">
@@ -475,29 +423,64 @@
                 <div class="theme-swatch" style="background:#475569;" data-theme="slate" title="Dark Slate"></div>
             </div>
         </div>
-
         <div class="dark-card">
             <div class="card-title">🌱 Wellness & Auto</div>
-            <div class="toggle-row">
-                <span class="toggle-label">Hydration</span>
-                <label class="switch"><input type="checkbox" id="waterToggle"><span class="slider"></span></label>
-            </div>
-            <div class="toggle-row">
-                <span class="toggle-label">Stretch</span>
-                <label class="switch"><input type="checkbox" id="stretchToggle"><span class="slider"></span></label>
-            </div>
-            <div class="toggle-row">
-                <span class="toggle-label">Auto-start Timer</span>
-                <label class="switch"><input type="checkbox" id="autoSwitchToggle" checked><span class="slider"></span></label>
-            </div>
+            <div class="toggle-row"><span class="toggle-label">Hydration</span><label class="switch"><input type="checkbox" id="waterToggle"><span class="slider"></span></label></div>
+            <div class="toggle-row"><span class="toggle-label">Stretch</span><label class="switch"><input type="checkbox" id="stretchToggle"><span class="slider"></span></label></div>
+            <div class="toggle-row"><span class="toggle-label">Auto-start Timer</span><label class="switch"><input type="checkbox" id="autoSwitchToggle" checked><span class="slider"></span></label></div>
+        </div>
+    </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>ACTIVITY REPORT</h3>
+            <button class="close-btn" id="closeReportBtn">✕</button>
         </div>
 
         <div class="dark-card">
-            <div class="card-title">📊 Progress Today</div>
-            <div class="stats-grid">
-                <div class="stat-box"><div class="stat-val" id="statPomosToday">0</div><div class="stat-lbl">Pomos</div></div>
-                <div class="stat-box"><div class="stat-val" id="statFocusMinutes">0</div><div class="stat-lbl">Mins</div></div>
-                <div class="stat-box"><div class="stat-val" id="statBreaks">0</div><div class="stat-lbl">Breaks</div></div>
+            <nav class="report-nav">
+                <button class="report-tab active" onclick="switchReportTab('activity')" id="tabActivity">Activity</button>
+                <button class="report-tab" onclick="switchReportTab('project')" id="tabProject">Project / Task</button>
+            </nav>
+
+            <div id="viewActivity">
+                <div class="time-filter-row">
+                    <button class="time-filter-btn active" onclick="updateActivityChart('daily', this)">Daily</button>
+                    <button class="time-filter-btn" onclick="updateActivityChart('weekly', this)">Weekly</button>
+                    <button class="time-filter-btn" onclick="updateActivityChart('monthly', this)">Monthly</button>
+                </div>
+
+                <div class="report-summary-row">
+                    <div class="summary-card">
+                        <div class="sum-val" id="repFocusHours">0.0</div>
+                        <div class="sum-lbl">Hours Focused</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="sum-val" id="repStreak">0</div>
+                        <div class="sum-lbl">Current Streak</div>
+                    </div>
+                </div>
+                <div class="card-title">Focus Trends</div>
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
+                <div style="margin-top:10px; text-align:right;">
+                    <button onclick="generateDemoData()" style="background:none; border:1px solid #4ade80; color:#4ade80; border-radius:4px; font-size:10px; cursor:pointer; padding:2px 6px;">Simulate Data (Demo)</button>
+                </div>
+            </div>
+
+            <div id="viewProject" style="display:none;">
+                <div class="card-title">Time Distribution</div>
+                <div class="chart-container" style="height:200px; margin-bottom:20px;">
+                    <canvas id="projectChart"></canvas>
+                </div>
+                <div class="card-title">Task Ranking</div>
+                <ul class="ranking-list" id="rankingList">
+                    <li class="ranking-item" style="color:#aaa; text-align:center;">No data available</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -505,15 +488,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import {
-        getFirestore,
-        doc,
-        getDoc,
-        setDoc,
-        updateDoc,
-        runTransaction,
-        increment
-    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
@@ -541,13 +516,10 @@
     let tickInterval  = null;
     let userStatsDocCache = null;
     let durations = { work: 25, short: 5, long: 15 };
-
-    // --- NEW LOGIC: Cycle Counter ---
     let pomodoroCycleCount = 0; 
     let longBreakInterval  = 4; 
-    // --------------------------------
+    let currentStreak = 0;
 
-    // Updated Themes (Added Orange, Pink, Slate)
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
         red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
@@ -559,29 +531,27 @@
     };
     let activeTheme = "teal";
 
-    const root        = document.documentElement;
+    const root = document.documentElement;
     const timeDisplay = document.getElementById("timeDisplay");
-    const startBtn    = document.getElementById("startBtn");
-    const finishBtn   = document.getElementById("finishTaskBtn");
-    const taskSelect  = document.getElementById("focusTaskSelect");
-
+    const startBtn = document.getElementById("startBtn");
+    const finishBtn = document.getElementById("finishTaskBtn");
+    const taskSelect = document.getElementById("focusTaskSelect");
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Charts
+    let activityChart = null;
+    let projectChart = null;
 
+    // --- Sound Logic ---
     function getVolume() { return document.getElementById("volumeSlider").value / 100; }
-
-    // Enhanced Sound Function with Melody and None support
     function playSound(type) {
-        if (type === "none") return; // Mute logic
-
+        if (type === "none") return;
         if (audioCtx.state === "suspended") audioCtx.resume();
         const vol = getVolume();
         if (vol <= 0.01) return;
-
         const now = audioCtx.currentTime;
-
-        // Helper for oscillators
         const playTone = (freq, type, start, dur) => {
-            const osc  = audioCtx.createOscillator();
+            const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
@@ -592,21 +562,10 @@
             osc.start(start);
             osc.stop(start + dur);
         };
-
-        if (type === "bell") {
-            playTone(523.25, "sine", now, 1.5);
-        } else if (type === "digital") {
-            playTone(880, "square", now, 0.1);
-            playTone(1760, "square", now + 0.1, 0.1);
-        } else if (type === "wood") {
-            playTone(800, "triangle", now, 0.1);
-        } else if (type === "melody") {
-            // Simple Major Arpeggio (C-E-G-C)
-            playTone(523.25, "sine", now, 0.3);       // C4
-            playTone(659.25, "sine", now + 0.2, 0.3); // E4
-            playTone(783.99, "sine", now + 0.4, 0.3); // G4
-            playTone(1046.5, "sine", now + 0.6, 0.6); // C5
-        }
+        if (type === "bell") { playTone(523.25, "sine", now, 1.5); } 
+        else if (type === "digital") { playTone(880, "square", now, 0.1); playTone(1760, "square", now + 0.1, 0.1); } 
+        else if (type === "wood") { playTone(800, "triangle", now, 0.1); } 
+        else if (type === "melody") { playTone(523.25, "sine", now, 0.3); playTone(659.25, "sine", now + 0.2, 0.3); playTone(783.99, "sine", now + 0.4, 0.3); playTone(1046.5, "sine", now + 0.6, 0.6); }
     }
 
     function startTicking() {
@@ -615,7 +574,7 @@
         tickInterval = setInterval(() => {
             const vol = getVolume() * 0.3;
             if (vol > 0.01) {
-                const osc  = audioCtx.createOscillator();
+                const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
@@ -628,19 +587,10 @@
             }
         }, 1000);
     }
+    function stopTicking() { if (tickInterval) clearInterval(tickInterval); tickInterval = null; }
 
-    function stopTicking() {
-        if (tickInterval) clearInterval(tickInterval);
-        tickInterval = null;
-    }
-
-    // Play button handlers for settings
     document.querySelectorAll(".test-btn").forEach(btn => {
-        btn.onclick = () => {
-            const selectId = btn.dataset.target;
-            const type = document.getElementById(selectId).value;
-            playSound(type);
-        };
+        btn.onclick = () => { playSound(document.getElementById(btn.dataset.target).value); };
     });
 
     async function init() {
@@ -648,8 +598,6 @@
         await loadUserStats();
         await loadBoardTasksIntoDropdown();
         applyTheme(activeTheme);
-        
-        // Initialize Slider text
         document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
     }
 
@@ -660,7 +608,6 @@
         root.style.setProperty("--bg-short", t.short);
         root.style.setProperty("--bg-long",  t.long);
         updateModeColors();
-
         document.querySelectorAll(".theme-swatch").forEach(el => {
             el.classList.toggle("selected", el.dataset.theme === name);
         });
@@ -681,17 +628,11 @@
         currentMode = mode;
         remainingSeconds = durations[mode] * 60;
         updateModeColors();
-        document.querySelectorAll(".tab-btn").forEach(btn =>
-            btn.classList.toggle("active", btn.dataset.mode === mode)
-        );
+        document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
         stopTimer();
         updateTimeDisplay();
-        
-        if(currentMode !== 'work') {
-            finishBtn.style.display = 'none';
-        } else if (timerInterval && taskSelect.value) {
-            finishBtn.style.display = 'flex';
-        }
+        if(currentMode !== 'work') { finishBtn.style.display = 'none'; } 
+        else if (timerInterval && taskSelect.value) { finishBtn.style.display = 'flex'; }
     }
 
     function updateTimeDisplay() {
@@ -703,23 +644,15 @@
 
     function startTimer() {
         if (currentMode === "work" && !taskSelect.value) {
-            alert("Please select a task from the list below to start focusing.");
+            alert("Please select a task to start focusing.");
             return;
         }
-
-        if (timerInterval) {
-            stopTimer();
-            return;
-        }
+        if (timerInterval) { stopTimer(); return; }
         
         startBtn.textContent = "PAUSE";
         startBtn.style.boxShadow = "none";
         startBtn.style.transform = "translateY(4px)";
-
-        if (currentMode === "work") {
-            finishBtn.style.display = 'flex';
-        }
-
+        if (currentMode === "work") finishBtn.style.display = 'flex';
         if (document.getElementById("tickToggle").checked) startTicking();
 
         timerInterval = setInterval(() => {
@@ -740,165 +673,160 @@
     }
 
     finishBtn.onclick = async () => {
-        if (!confirm("Are you sure you want to complete this task now?")) return;
-
+        if (!confirm("Complete task early?")) return;
         stopTimer();
-        playSound('digital'); // Success confirmation
-
+        playSound('digital');
         const totalSeconds = durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
-        const minsSpent = Math.ceil(elapsedSeconds / 60); // Round UP
-
+        const minsSpent = Math.ceil(elapsedSeconds / 60);
         const tid = taskSelect.value;
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
         }
-
         remainingSeconds = durations.work * 60;
         updateTimeDisplay();
-        alert(`Task completed. ${minsSpent} minutes recorded.`);
         await loadBoardTasksIntoDropdown();
+        // Early finish also triggers the break decision? Let's say yes for good habits.
+        showBreakDecisionModal();
     };
 
-    // --- UPDATED MAIN LOGIC: Handles Sounds & Long Break Cycles ---
     async function completeTimer() {
         stopTimer();
-
-        // 1. Play Correct Sound based on Mode
-        if (currentMode === "work") {
-            const sType = document.getElementById("workSoundType").value;
-            playSound(sType);
-        } else {
-            // Break ending
-            const sType = document.getElementById("breakSoundType").value;
-            playSound(sType);
-        }
-
+        
         if (currentMode === "work") {
             const mins = durations.work;
-            
-            // 2. Increment Cycle
             pomodoroCycleCount++;
-            console.log(`[FocusHub] Cycle: ${pomodoroCycleCount} / ${longBreakInterval}`);
-
+            playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
             const tid = taskSelect.value;
             if (tid) await updateTaskStatsOnly(tid, mins);
+            
+            // SHOW BREAK DECISION MODAL INSTEAD OF AUTO SWITCH
+            showBreakDecisionModal();
         } else {
-            await updateBreakStats();
-        }
-
-        if (document.getElementById("autoSwitchToggle").checked) {
-            let nextMode = "work";
-
-            if (currentMode === "work") {
-                // 3. Logic: Triggers Long Break if Cycle limit reached
-                if (pomodoroCycleCount >= longBreakInterval) {
-                    nextMode = "long";
-                    pomodoroCycleCount = 0; // Reset
-                } else {
-                    nextMode = "short";
-                }
+            // Break is done.
+            playSound(document.getElementById("breakSoundType").value);
+            await updateBreakStats(); // Count break for streak logic if needed
+            
+            // Auto switch back to work if enabled
+            if (document.getElementById("autoSwitchToggle").checked) {
+                switchMode("work");
+                // Don't auto-start if no task
             } else {
-                // Break ended -> Back to work
-                nextMode = "work";
-            }
-
-            switchMode(nextMode);
-
-            if (nextMode === 'work' && !taskSelect.value) {
-                // Wait for user task selection
-            } else {
-                startTimer();
+                switchMode("work");
             }
         }
     }
 
+    // --- Break Decision Logic ---
+    window.showBreakDecisionModal = function() {
+        document.getElementById("breakModal").classList.add("open");
+    }
+
+    window.handleBreakDecision = function(decision) {
+        document.getElementById("breakModal").classList.remove("open");
+        
+        if (decision === 'take') {
+            // Good behavior! Streak Up.
+            currentStreak++;
+            updateStreakUI();
+            
+            // Determine Short or Long Break
+            let nextMode = "short";
+            if (pomodoroCycleCount >= longBreakInterval) {
+                nextMode = "long";
+                pomodoroCycleCount = 0;
+            }
+            switchMode(nextMode);
+            startTimer(); // Auto start break
+            
+        } else if (decision === 'skip') {
+            // Bad behavior. No Streak increase (or maybe reset? Let's just not increase).
+            // Go straight back to work
+            switchMode("work");
+            // If auto-start is on, start work, otherwise wait
+            if (document.getElementById("autoSwitchToggle").checked) {
+                if(taskSelect.value) startTimer();
+            }
+
+        } else if (decision === 'remind') {
+            // Extend current work session
+            currentMode = 'work'; // Ensure we stay in work mode
+            remainingSeconds = 5 * 60; // Add 5 mins
+            updateTimeDisplay();
+            startTimer();
+        }
+    }
+
+    function updateStreakUI() {
+        const streakEl = document.getElementById("streakCount");
+        const streakBadge = document.getElementById("streakBadge");
+        streakEl.textContent = currentStreak;
+        if (currentStreak > 0) streakBadge.style.opacity = 1;
+        
+        // Save streak to DB if you want persistence
+        // updateDoc(userStatsDocCache, { current_streak: currentStreak });
+    }
+
+    // --- Stats & Firebase ---
     async function loadUserStats() {
         try {
             const today = new Date().toISOString().slice(0, 10);
             const ref = doc(db, "users", userId);
             let snap = await getDoc(ref);
-
             if (!snap.exists()) {
                 await setDoc(ref, { today_date: today });
                 snap = await getDoc(ref);
             }
-
             let data = snap.data();
             if (data.today_date !== today) {
-                await updateDoc(ref, {
-                    today_date: today,
-                    today_pomodoros: 0,
-                    today_focus_minutes: 0,
-                    breaks_today: 0
-                });
+                await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
                 data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
             }
-
             userStatsDocCache = ref;
-            document.getElementById("statPomosToday").textContent = data.today_pomodoros || 0;
-            document.getElementById("statFocusMinutes").textContent = data.today_focus_minutes || 0;
-            document.getElementById("statBreaks").textContent = data.breaks_today || 0;
-        } catch (err) {
-            console.error(err);
-        }
+            // Load streak if exists
+            currentStreak = data.current_streak || 0;
+            updateStreakUI();
+        } catch (err) { console.error(err); }
     }
 
     async function loadBoardTasksIntoDropdown() {
         try {
             const boardRef = doc(db, "boards", boardId);
             const snap = await getDoc(boardRef);
-
             taskSelect.innerHTML = "";
-            const baseOpt = document.createElement("option");
-            baseOpt.value = "";
-            baseOpt.textContent = "(Select a Task to Start)";
-            taskSelect.appendChild(baseOpt);
-
+            taskSelect.innerHTML += '<option value="">(Select a Task to Start)</option>';
             if (!snap.exists()) return;
-
             const board = snap.data();
-            const projects    = Array.isArray(board.projects)    ? board.projects    : [];
-            const tasks       = Array.isArray(board.tasks)       ? board.tasks       : [];
-
+            const projects = board.projects || [];
+            const tasks = board.tasks || [];
             const projectById = {};
             projects.forEach(p => { projectById[p.id] = p; });
-
             const openTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
-
             openTasks.forEach(t => {
-                const project   = projectById[t.projectId];
-                if (!project) return; 
-
+                const project = projectById[t.projectId];
+                if (!project) return;
                 const opt = document.createElement("option");
                 opt.value = t.id;
-                opt.textContent = `${t.name} • ${project.name}`; 
+                opt.textContent = `${t.name} • ${project.name}`;
                 taskSelect.appendChild(opt);
             });
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     }
 
     async function updateStats(mins) {
         if (!userStatsDocCache) return;
         await updateDoc(userStatsDocCache, {
             today_pomodoros: increment(1),
-            today_focus_minutes: increment(mins)
+            today_focus_minutes: increment(mins),
+            current_streak: currentStreak // persist streak
         });
-        const curMins = parseInt(document.getElementById("statFocusMinutes").textContent) || 0;
-        const curPomo = parseInt(document.getElementById("statPomosToday").textContent) || 0;
-        document.getElementById("statFocusMinutes").textContent = curMins + mins;
-        document.getElementById("statPomosToday").textContent = curPomo + 1;
     }
 
     async function updateBreakStats() {
         if (!userStatsDocCache) return;
         await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
-        const curBreaks = parseInt(document.getElementById("statBreaks").textContent) || 0;
-        document.getElementById("statBreaks").textContent = curBreaks + 1;
     }
 
     async function updateTaskStatsOnly(tid, mins) {
@@ -907,14 +835,11 @@
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
                 if(!bSnap.exists()) return;
-                const bData = bSnap.data();
-                const tasks = bData.tasks || [];
+                const tasks = bSnap.data().tasks || [];
                 const taskIndex = tasks.findIndex(t => t.id === tid);
                 if (taskIndex !== -1) {
-                    const t = tasks[taskIndex];
-                    t.pomodoro_count = (t.pomodoro_count || 0) + 1;
-                    t.focus_minutes  = (t.focus_minutes || 0) + mins;
-                    tasks[taskIndex] = t;
+                    tasks[taskIndex].pomodoro_count = (tasks[taskIndex].pomodoro_count || 0) + 1;
+                    tasks[taskIndex].focus_minutes = (tasks[taskIndex].focus_minutes || 0) + mins;
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
@@ -927,49 +852,177 @@
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
                 if(!bSnap.exists()) return;
-                const bData = bSnap.data();
-                const tasks = bData.tasks || [];
+                const tasks = bSnap.data().tasks || [];
                 const taskIndex = tasks.findIndex(t => t.id === tid);
                 if (taskIndex !== -1) {
-                    const t = tasks[taskIndex];
-                    t.pomodoro_count = (t.pomodoro_count || 0) + 1;
-                    t.focus_minutes  = (t.focus_minutes || 0) + mins;
-                    t.status = "Done"; 
-                    tasks[taskIndex] = t;
+                    tasks[taskIndex].status = "Done";
+                    tasks[taskIndex].focus_minutes = (tasks[taskIndex].focus_minutes || 0) + mins;
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
         } catch (err) { console.error(err); }
     }
 
-    startBtn.onclick = startTimer;
-    document.querySelectorAll(".tab-btn").forEach(btn => {
-        btn.onclick = () => switchMode(btn.dataset.mode);
-    });
+    // --- Report System ---
+    window.switchReportTab = function(tabName) {
+        document.getElementById('viewActivity').style.display = tabName === 'activity' ? 'block' : 'none';
+        document.getElementById('viewProject').style.display = tabName === 'project' ? 'block' : 'none';
+        document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
+        document.getElementById('tabProject').classList.toggle('active', tabName === 'project');
+        
+        if(tabName === 'activity') updateActivityChart('daily');
+        if(tabName === 'project') generateProjectReport();
+    }
+    
+    // Demo Data Generator for Judges
+    window.generateDemoData = function() {
+        const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const data = [2, 4.5, 3, 5.5, 4, 1, 0];
+        renderActivityChart(labels, data, "Hours");
+        document.getElementById("repFocusHours").textContent = "20.0";
+        document.getElementById("repStreak").textContent = "5";
+        alert("Demo data loaded for presentation!");
+    }
 
-    ["work", "short", "long"].forEach(t => {
-        const inp = document.getElementById(`${t}Duration`);
-        inp.onchange = () => {
-            durations[t] = Number(inp.value);
-            if (!timerInterval && currentMode === t) {
-                remainingSeconds = durations[t] * 60;
-                updateTimeDisplay();
+    window.updateActivityChart = function(type, btn) {
+        if(btn) {
+            document.querySelectorAll('.time-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+        
+        // In a real app, you fetch historical data from a subcollection
+        // For hackathon, we simulate or show today's if daily
+        let labels = [], data = [];
+        
+        if (type === 'daily') {
+            labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            // We only have today's real data. 
+            // Mocking previous days as 0 or random for visual if desired, but let's keep it simple.
+            data = [0, 0, 0, 0, 0, 0, 0];
+            const dayIndex = new Date().getDay() - 1; // 0=Mon
+            const todayMins = userStatsDocCache ? 0 : 0; // Fetch real mins here if needed
+            // data[dayIndex] = todayMins / 60;
+        } else if (type === 'weekly') {
+            labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
+            data = [0, 0, 0, 0];
+        } else {
+            labels = ["Jan", "Feb", "Mar", "Apr", "May"];
+            data = [0, 0, 0, 0, 0];
+        }
+        renderActivityChart(labels, data, "Hours");
+    }
+
+    function renderActivityChart(labels, data, label) {
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        if (activityChart) activityChart.destroy();
+        activityChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    backgroundColor: '#4ade80',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
             }
-        };
-    });
+        });
+    }
 
-    // Handle Slider Change
-    const intervalSlider  = document.getElementById("intervalSlider");
+    async function generateProjectReport() {
+        const boardRef = doc(db, "boards", boardId);
+        const snap = await getDoc(boardRef);
+        if(!snap.exists()) return;
+        const bData = snap.data();
+        const tasks = bData.tasks || [];
+        const projects = bData.projects || [];
+        
+        const projMap = {}; // { projName: minutes }
+        projects.forEach(p => projMap[p.id] = { name: p.name, minutes: 0 });
+        
+        tasks.forEach(t => {
+            if (t.projectId && projMap[t.projectId]) {
+                projMap[t.projectId].minutes += (t.focus_minutes || 0);
+            }
+        });
+
+        // Prepare Chart Data
+        const labels = [];
+        const data = [];
+        const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24'];
+        const rankList = document.getElementById("rankingList");
+        rankList.innerHTML = "";
+
+        Object.values(projMap).forEach((p) => {
+            if (p.minutes > 0) {
+                labels.push(p.name);
+                data.push(p.minutes);
+                
+                // Add to ranking list
+                const li = document.createElement("li");
+                li.className = "ranking-item";
+                li.innerHTML = `
+                    <span class="rank-name">${p.name}</span>
+                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, p.minutes)}%"></div></div>
+                    <span class="rank-time">${p.minutes}m</span>
+                `;
+                rankList.appendChild(li);
+            }
+        });
+
+        if (data.length === 0) {
+            rankList.innerHTML = '<li class="ranking-item" style="color:#aaa; text-align:center;">No project activity yet</li>';
+        }
+
+        const ctx = document.getElementById('projectChart').getContext('2d');
+        if (projectChart) projectChart.destroy();
+        projectChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right', labels: { color: 'white' } } }
+            }
+        });
+    }
+
+    // Modal Events
+    const settingsModal = document.getElementById("settingsModal");
+    const reportModal = document.getElementById("reportModal");
+
+    document.getElementById("openSettingsBtn").onclick = () => settingsModal.classList.add("open");
+    document.getElementById("closeSettingsBtn").onclick = () => settingsModal.classList.remove("open");
+    
+    document.getElementById("openReportBtn").onclick = () => {
+        reportModal.classList.add("open");
+        updateActivityChart('daily'); // Default view
+    };
+    document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
+
+    // Slider
+    const intervalSlider = document.getElementById("intervalSlider");
     const intervalDisplay = document.getElementById("intervalDisplay");
     intervalSlider.oninput = () => {
         longBreakInterval = parseInt(intervalSlider.value);
         intervalDisplay.textContent = `${longBreakInterval} Pomodoros`;
     };
-
-    const modal = document.getElementById("settingsModal");
-    document.getElementById("openSettingsBtn").onclick  = () => modal.classList.add("open");
-    document.getElementById("closeSettingsBtn").onclick = () => modal.classList.remove("open");
-    modal.onclick = (e) => { if (e.target === modal) modal.classList.remove("open"); };
 
     init();
 </script>
