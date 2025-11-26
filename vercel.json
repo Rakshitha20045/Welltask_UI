@@ -13,5 +13,15 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/focus-cron",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/break-cron",
+      "schedule": "* * * * *"
+    }
   ]
 }
