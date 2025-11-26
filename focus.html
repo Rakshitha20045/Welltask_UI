@@ -87,7 +87,7 @@
         .rank-bar-fill { height: 100%; background: #4ade80; }
         .rank-time { font-size: 12px; color: #94a3b8; min-width: 45px; text-align: right; }
 
-        /* Break Modal Options */
+        /* Break Modal */
         .break-option-btn { width: 100%; padding: 15px; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.2); color: white; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
         .break-option-btn:hover { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
         .break-option-btn strong { display: block; font-size: 15px; margin-bottom: 2px; }
@@ -249,7 +249,7 @@
                     <button class="time-filter-btn" onclick="updateTaskPeriod('weekly')">Weekly</button>
                     <button class="time-filter-btn" onclick="updateTaskPeriod('monthly')">Monthly</button>
                 </div>
-                <div class="card-title">Task Distribution (Where time went)</div>
+                <div class="card-title">Task Distribution (Total Time)</div>
                 <div class="chart-container" style="height:200px; margin-bottom:20px;">
                     <canvas id="taskChart"></canvas>
                 </div>
@@ -295,7 +295,6 @@
     let pomodoroCycleCount = 0; 
     let longBreakInterval  = 4; 
     let currentStreak = 0;
-    let sessionStats = { work: 0, short: 0, long: 0 };
     let activityChartInstance = null;
     let taskChartInstance = null;
     let cachedTasks = [];
@@ -431,7 +430,6 @@
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
-            sessionStats.work++;
         }
         remainingSeconds = durations.work * 60; 
         updateTimeDisplay();
@@ -444,15 +442,12 @@
         if (currentMode === "work") {
             const mins = durations.work;
             pomodoroCycleCount++;
-            sessionStats.work++;
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
             const tid = taskSelect.value;
             if (tid) await updateTaskStatsOnly(tid, mins);
             showBreakDecisionModal();
         } else {
-            if(currentMode === 'short') sessionStats.short++;
-            if(currentMode === 'long') sessionStats.long++;
             playSound(document.getElementById("breakSoundType").value);
             await updateBreakStats();
             if (document.getElementById("autoSwitchToggle").checked) { switchMode("work"); } else { switchMode("work"); }
@@ -482,7 +477,7 @@
         if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak });
     }
 
-    // --- REPORTING SYSTEM WITH SIMULATION ---
+    // --- REPORTING SYSTEM (REAL DATA) ---
     window.switchReportTab = function(tabName) {
         document.getElementById('viewActivity').style.display = tabName === 'activity' ? 'block' : 'none';
         document.getElementById('viewTask').style.display = tabName === 'task' ? 'block' : 'none';
@@ -496,17 +491,28 @@
         document.querySelectorAll('#viewActivity .time-filter-btn').forEach(b => b.classList.remove('active'));
         event.target.classList.add('active');
         let labels = [], data = [];
+        
+        // Use Real Data from UI elements (populated from DB)
+        const todayMins = parseInt(document.getElementById("repMinutes").textContent) || 0;
+        const todayPomo = parseInt(document.getElementById("repPomos").textContent) || 0;
+        const todayBreak = parseInt(document.getElementById("repBreaks").textContent) || 0;
+
         if (period === 'daily') {
             labels = ["Sessions", "Mins", "Breaks"];
-            const todayMins = parseInt(document.getElementById("repMinutes").textContent) || 0;
-            const todayPomo = parseInt(document.getElementById("repPomos").textContent) || 0;
-            const todayBreak = parseInt(document.getElementById("repBreaks").textContent) || 0;
             data = [todayPomo, todayMins, todayBreak];
             renderActivityChart(labels, data, 'bar', 'Today Activity');
+        } else if (period === 'weekly') {
+            labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            data = [0, 0, 0, 0, 0, 0, 0];
+            // Place today's data in correct day slot (0=Mon, 6=Sun)
+            const dayIndex = (new Date().getDay() + 6) % 7; 
+            data[dayIndex] = todayMins;
+            renderActivityChart(labels, data, 'bar', 'Weekly Activity (Mins)');
         } else {
-            labels = period === 'weekly' ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Week 1", "Week 2", "Week 3", "Week 4"];
-            data = labels.map(() => Math.floor(Math.random() * 50) + 10);
-            renderActivityChart(labels, data, 'line', `${period.charAt(0).toUpperCase() + period.slice(1)} Trend`);
+            labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
+            data = [0, 0, 0, 0];
+            data[0] = todayMins; // Simplification: Today is in Week 1 relative to view
+            renderActivityChart(labels, data, 'line', 'Monthly Activity (Mins)');
         }
     }
 
@@ -515,44 +521,31 @@
         if (activityChartInstance) activityChartInstance.destroy();
         activityChartInstance = new Chart(ctx, {
             type: type,
-            data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: '#4ade80', borderColor: '#4ade80', tension: 0.4, borderRadius: 4 }] },
+            data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: '#4ade80', borderColor: '#4ade80', tension: 0.1, borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
         });
     }
 
-    // --- SMART TASK DISTRIBUTION SIMULATION ---
+    // --- TASK CHART (NO SIMULATION) ---
     window.updateTaskPeriod = function(period) {
         document.querySelectorAll('#viewTask .time-filter-btn').forEach(b => b.classList.remove('active'));
         event.target.classList.add('active');
-        generateTaskChart(period); // Pass period for simulation
+        generateTaskChart(); // Always same data (Total)
     }
 
-    function generateTaskChart(period) {
+    function generateTaskChart() {
         const labels = [];
         const data = [];
         const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
         const rankList = document.getElementById("rankingList");
         rankList.innerHTML = "";
         
-        // Multipliers for Simulation
-        let multiplier = 1;
-        if(period === 'weekly') multiplier = 5;
-        if(period === 'monthly') multiplier = 20;
-
         const sorted = [...cachedTasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
 
-        sorted.forEach((t, index) => {
+        sorted.forEach((t) => {
             if((t.focus_minutes || 0) > 0) {
                 labels.push(t.name);
-                
-                // Demo Logic: Add variance so chart SHAPE changes
-                let adjustedMins = t.focus_minutes * multiplier;
-                if(period !== 'daily') {
-                    // Add deterministic noise so charts look distinct
-                    adjustedMins += (t.name.length * multiplier * 0.5); 
-                }
-                adjustedMins = Math.round(adjustedMins);
-                data.push(adjustedMins);
+                data.push(t.focus_minutes); // RAW TOTAL
                 
                 const li = document.createElement("li");
                 li.className = "ranking-item";
@@ -560,7 +553,7 @@
                 li.innerHTML = `
                     <span class="rank-name" title="${t.name}">${statusIcon}${t.name}</span>
                     <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.focus_minutes)}%"></div></div>
-                    <span class="rank-time">${adjustedMins}m</span>
+                    <span class="rank-time">${t.focus_minutes}m</span>
                 `;
                 rankList.appendChild(li);
             }
