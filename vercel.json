@@ -1,3 +1,6 @@
+vercel.json 
+
+
 {
   "headers": [
     {
@@ -12,16 +15,6 @@
           "value": "frame-ancestors *"
         }
       ]
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/focus-cron",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/break-cron",
-      "schedule": "* * * * *"
     }
   ]
 }
