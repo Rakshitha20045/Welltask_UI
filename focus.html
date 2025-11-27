@@ -265,6 +265,7 @@
 
             <div id="viewActivity">
                 <div class="time-filter-row">
+                    <!-- FIX: pass this to updateReportPeriod -->
                     <button class="time-filter-btn active" onclick="updateReportPeriod('daily', this)">Daily</button>
                     <button class="time-filter-btn" onclick="updateReportPeriod('weekly', this)">Weekly</button>
                     <button class="time-filter-btn" onclick="updateReportPeriod('monthly', this)">Monthly</button>
@@ -293,28 +294,24 @@
 </div>
 
 <script type="module">
-    import { 
-        initializeApp 
-    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import { 
-        getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot 
-    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-    // ---------------- FIREBASE CONFIG ----------------
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
-        apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
-        authDomain: "welltask-8bbcf.firebaseapp.com",
-        projectId: "welltask-8bbcf",
-        storageBucket: "welltask-8bbcf.firebasestorage.app",
-        messagingSenderId: "533119656804",
-        appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
-        measurementId: "G-3HD74YPC52"
+      apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
+      authDomain: "welltask-8bbcf.firebaseapp.com",
+      projectId: "welltask-8bbcf",
+      storageBucket: "welltask-8bbcf.firebasestorage.app",
+      messagingSenderId: "533119656804",
+      appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
+      measurementId: "G-3HD74YPC52"
     };
 
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
 
-    // ---------------- URL PARAMS ----------------
     const params   = new URLSearchParams(window.location.search);
     const userId   = params.get("userId")   || "demo-user";
     const userName = params.get("userName") || "User";
@@ -322,15 +319,10 @@
 
     document.getElementById("userLabel").textContent = userName;
 
-    // Active session doc used for BOT <-> UI communication
-    const sessionRef = doc(db, "active_sessions", userId);
-    let lastCommandId = null; // to avoid processing same command twice
-
-    // ---------------- TIMER STATE ----------------
     let currentMode = "work";
     let durations = { work: 25, short: 5, long: 15 };
     let remainingSeconds = 25 * 60;
-    // Track full duration of current session to compute elapsed time
+    // NEW: track total seconds for the CURRENT session
     let sessionTotalSeconds = remainingSeconds;
 
     let timerInterval = null;
@@ -343,7 +335,6 @@
     let taskChartInstance = null;
     let cachedTasks = [];
 
-    // ---------------- THEMES ----------------
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
         red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
@@ -355,26 +346,20 @@
     };
     let activeTheme = "teal";
 
-    // ---------------- DOM ELEMENTS ----------------
-    const root        = document.documentElement;
+    // DOM Elements
+    const root = document.documentElement;
     const timeDisplay = document.getElementById("timeDisplay");
-    const startBtn    = document.getElementById("startBtn");
-    const finishBtn   = document.getElementById("finishTaskBtn");
-    const taskSelect  = document.getElementById("focusTaskSelect");
-    const audioCtx    = new (window.AudioContext || window.webkitAudioContext)();
+    const startBtn = document.getElementById("startBtn");
+    const finishBtn = document.getElementById("finishTaskBtn");
+    const taskSelect = document.getElementById("focusTaskSelect");
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // ---------------- AUDIO ----------------
-    function getVolume() { 
-        return document.getElementById("volumeSlider").value / 100; 
-    }
-
+    function getVolume() { return document.getElementById("volumeSlider").value / 100; }
     function playSound(type) {
         if (type === "none") return;
         if (audioCtx.state === "suspended") audioCtx.resume();
         const vol = getVolume();
         if (vol <= 0.01) return;
-
-        console.log("[DEBUG] playSound:", type, "volume:", vol);
         const now = audioCtx.currentTime;
         
         const playTone = (freq, wavetype, start, dur) => {
@@ -389,18 +374,9 @@
             osc.start(start);
             osc.stop(start + dur);
         };
-
-        if (type === "bell") {
-            playTone(523.25, "sine", now, 1.5);
-        } else if (type === "digital") {
-            playTone(880, "square", now, 0.1);
-            playTone(1760, "square", now + 0.1, 0.1);
-        } else if (type === "melody") {
-            playTone(523.25, "sine", now, 0.3);
-            playTone(659.25, "sine", now + 0.2, 0.3);
-            playTone(783.99, "sine", now + 0.4, 0.3);
-            playTone(1046.5, "sine", now + 0.6, 0.6);
-        }
+        if (type === "bell") { playTone(523.25, "sine", now, 1.5); } 
+        else if (type === "digital") { playTone(880, "square", now, 0.1); playTone(1760, "square", now + 0.1, 0.1); } 
+        else if (type === "melody") { playTone(523.25, "sine", now, 0.3); playTone(659.25, "sine", now + 0.2, 0.3); playTone(783.99, "sine", now + 0.4, 0.3); playTone(1046.5, "sine", now + 0.6, 0.6); }
     }
 
     function startTicking() {
@@ -422,86 +398,57 @@
             }
         }, 1000);
     }
-    function stopTicking() { 
-        if (tickInterval) clearInterval(tickInterval); 
-        tickInterval = null; 
-    }
+    function stopTicking() { if (tickInterval) clearInterval(tickInterval); tickInterval = null; }
 
-    // ---------------- DISPLAY ----------------
     function updateTimeDisplay() {
         if (remainingSeconds < 0) remainingSeconds = 0;
         const m = Math.floor(remainingSeconds / 60);
         const s = remainingSeconds % 60;
-        const txt = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-        timeDisplay.textContent = txt;
-        document.title = `${txt} - Focus Hub`;
+        timeDisplay.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        document.title = `${timeDisplay.textContent} - Focus Hub`;
     }
 
-    // ---------------- MODE SWITCH ----------------
     window.switchMode = function(mode) {
-        console.log("[DEBUG] switchMode ->", mode);
         stopTimer();
         currentMode = mode;
-        remainingSeconds     = durations[mode] * 60;
-        sessionTotalSeconds  = remainingSeconds;
+        remainingSeconds = durations[mode] * 60;
+        // NEW: reset session total when switching modes
+        sessionTotalSeconds = remainingSeconds;
 
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
-        document.getElementById(
-            mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong'
-        ).classList.add("active");
-
+        document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
         applyTheme(activeTheme);
         updateTimeDisplay();
+        if(currentMode !== 'work') { finishBtn.style.display = 'none'; } 
+        else if (taskSelect.value) { finishBtn.style.display = 'flex'; }
+    }
 
-        if (currentMode !== 'work') {
-            finishBtn.style.display = 'none';
-        } else if (taskSelect.value) {
-            finishBtn.style.display = 'flex';
-        }
-    };
-
-    document.getElementById("btnWork").onclick  = () => switchMode("work");
+    document.getElementById("btnWork").onclick = () => switchMode("work");
     document.getElementById("btnShort").onclick = () => switchMode("short");
-    document.getElementById("btnLong").onclick  = () => switchMode("long");
+    document.getElementById("btnLong").onclick = () => switchMode("long");
     
-    // ---------------- START / PAUSE BUTTON ----------------
     document.getElementById("startBtn").onclick = () => {
-        if (timerInterval) {
-            console.log("[DEBUG] StartBtn clicked: PAUSE");
-            stopTimer();
-        } else {
-            if (currentMode === "work" && !taskSelect.value) {
-                alert("Please select a task to start focusing.");
-                return;
-            }
-            console.log("[DEBUG] StartBtn clicked: START. Mode:", currentMode, 
-                        "Task:", taskSelect.value, 
-                        "Remaining:", remainingSeconds);
+        if (timerInterval) { stopTimer(); } 
+        else {
+            if (currentMode === "work" && !taskSelect.value) { alert("Please select a task to start focusing."); return; }
             startTimer();
         }
     };
 
     function startTimer() {
-        console.log("[DEBUG] startTimer() - mode:", currentMode, "remaining:", remainingSeconds);
         startBtn.textContent = "PAUSE";
         startBtn.style.transform = "translateY(4px)";
         startBtn.style.boxShadow = "none";
-
         if (currentMode === "work") finishBtn.style.display = 'flex';
         if (document.getElementById("tickToggle").checked) startTicking();
-
         timerInterval = setInterval(() => {
             remainingSeconds--;
-            if (remainingSeconds % 10 === 0) {
-                console.log("[DEBUG] ticking - remainingSeconds:", remainingSeconds);
-            }
             updateTimeDisplay();
             if (remainingSeconds <= 0) completeTimer();
         }, 1000);
     }
 
     function stopTimer() {
-        console.log("[DEBUG] stopTimer()");
         clearInterval(timerInterval);
         timerInterval = null;
         stopTicking();
@@ -511,145 +458,89 @@
         finishBtn.style.display = 'none';
     }
 
-    // ---------------- FINISH EARLY BUTTON ----------------
     finishBtn.onclick = async () => {
-        console.log("[DEBUG] Finish early button clicked");
         if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
-
         stopTimer();
         playSound('digital');
-
-        const totalSeconds   = sessionTotalSeconds || durations.work * 60;
+        const totalSeconds = sessionTotalSeconds || durations.work * 60;
         const elapsedSeconds = totalSeconds - remainingSeconds;
-        const minsSpent      = Math.max(1, Math.ceil(elapsedSeconds / 60));
-        const tid            = taskSelect.value;
-        console.log("[DEBUG] Finish early elapsedSeconds:", elapsedSeconds, "minsSpent:", minsSpent, "taskId:", tid);
-
+        const minsSpent = Math.max(1, Math.ceil(elapsedSeconds / 60));
+        const tid = taskSelect.value;
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
             await logDailyTaskWork(tid, minsSpent);
         }
-
-        // Reset for next focus
-        remainingSeconds    = durations.work * 60;
+        // Reset to full focus duration for next session
+        remainingSeconds = durations.work * 60;
         sessionTotalSeconds = remainingSeconds;
         updateTimeDisplay();
         await loadBoardTasksIntoDropdown();
-
-        // Still show break decision modal + bot will also show break card
         showBreakDecisionModal();
     };
 
-    // ---------------- TIMER COMPLETE (NATURAL END) ----------------
     async function completeTimer() {
-        console.log("[DEBUG] completeTimer() - mode:", currentMode, "remaining:", remainingSeconds);
         stopTimer();
-
         if (currentMode === "work") {
-            const total          = sessionTotalSeconds || (durations.work * 60);
+            // NEW: compute actual elapsed time from this session
+            const total = sessionTotalSeconds || (durations.work * 60);
             const elapsedSeconds = total - remainingSeconds;
-            const mins           = Math.max(1, Math.round(elapsedSeconds / 60));
-            const tid            = taskSelect.value;
-
-            console.log("[DEBUG] Focus completed. elapsedSeconds:", elapsedSeconds, "mins:", mins, "taskId:", tid);
+            const mins = Math.max(1, Math.round(elapsedSeconds / 60));
 
             pomodoroCycleCount++;
             playSound(document.getElementById("workSoundType").value);
-
             await updateStats(mins);
-
+            const tid = taskSelect.value;
             if (tid) {
                 await updateTaskStatsOnly(tid, mins);
                 await logDailyTaskWork(tid, mins);
             }
-
-            // Show UI break modal AND bot alert (bot part handled by Deluge webhook)
             showBreakDecisionModal();
         } else {
-            console.log("[DEBUG] Break completed. Mode:", currentMode);
             playSound(document.getElementById("breakSoundType").value);
             await updateBreakStats();
-
-            // After break, go to work
-            switchMode("work");
-            if (document.getElementById("autoSwitchToggle").checked && taskSelect.value) {
-                startTimer();
-            }
+            if (document.getElementById("autoSwitchToggle").checked) { switchMode("work"); } else { switchMode("work"); }
         }
     }
 
-    // ---------------- DAILY TASK LOG ----------------
+    // --- DAILY LOGIC ---
     async function logDailyTaskWork(tid, mins) {
         try {
             const todayStr = new Date().toISOString().slice(0, 10);
             const logRef = doc(db, "boards", boardId, "daily_logs", todayStr);
-            console.log("[DEBUG] logDailyTaskWork tid:", tid, "mins:", mins);
             await setDoc(logRef, { [tid]: increment(mins) }, { merge: true });
-        } catch(e) { 
-            console.error("[DEBUG] logDailyTaskWork error:", e); 
-        }
+        } catch(e) { console.error(e); }
     }
 
-    // ---------------- BREAK MODAL + BOT COMMAND HANDLER ----------------
-    window.showBreakDecisionModal = function() {
-        console.log("[DEBUG] showBreakDecisionModal()");
-        document.getElementById("breakModal").classList.add("open");
-    };
-
+    window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); }
     window.handleBreakDecision = function(decision) {
-        console.log("[DEBUG] handleBreakDecision() decision:", decision);
         document.getElementById("breakModal").classList.remove("open");
-
         if (decision === 'take') {
-            currentStreak++;
-            updateStreakUI();
-
+            currentStreak++; updateStreakUI();
             let nextMode = "short";
-            if (pomodoroCycleCount >= longBreakInterval) {
-                nextMode = "long";
-                pomodoroCycleCount = 0;
-            }
-            switchMode(nextMode);
-            startTimer();
+            if (pomodoroCycleCount >= longBreakInterval) { nextMode = "long"; pomodoroCycleCount = 0; }
+            switchMode(nextMode); startTimer(); 
         } else if (decision === 'skip') {
-            if (currentStreak > 0) {
-                alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
-            }
-            currentStreak = 0;
-            updateStreakUI();
-
-            switchMode("work");
-            if (document.getElementById("autoSwitchToggle").checked && taskSelect.value) {
-                startTimer();
-            }
+            if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
+            currentStreak = 0; updateStreakUI();
+            switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer();
         } else if (decision === 'remind') {
-            console.log("[DEBUG] Remind me later clicked");
-            currentMode          = 'work';
-            remainingSeconds     = 5 * 60;
-            sessionTotalSeconds  = 5 * 60;
+            // NEW: treat this as a fresh 5-minute focus session
+            currentMode = 'work';
+            remainingSeconds = 5 * 60;
+            sessionTotalSeconds = 5 * 60;
             updateTimeDisplay();
             startTimer();
         }
-    };
-
-    // ---------------- STREAK UI ----------------
-    function updateStreakUI() {
-        document.getElementById("streakCount").textContent = currentStreak;
-        if (currentStreak > 0) {
-            document.getElementById("streakBadge").style.opacity = 1;
-        } else {
-            document.getElementById("streakBadge").style.opacity = 0;
-        }
-
-        if (userStatsDocCache) {
-            updateDoc(userStatsDocCache, { current_streak: currentStreak }).catch(e => {
-                console.error("[DEBUG] updateStreakUI firestore error:", e);
-            });
-        }
     }
 
-    // ---------------- RESTORE TASK MODAL ----------------
+    function updateStreakUI() {
+        document.getElementById("streakCount").textContent = currentStreak;
+        if (currentStreak > 0) document.getElementById("streakBadge").style.opacity = 1;
+        if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak });
+    }
+
+    // --- RESTORE TASK LOGIC ---
     const restoreModal = document.getElementById("restoreModal");
     document.getElementById("openRestoreBtn").onclick = () => {
         restoreModal.classList.add("open");
@@ -679,15 +570,14 @@
     }
 
     window.restoreTask = async function(tid) {
-        console.log("[DEBUG] restoreTask tid:", tid);
         try {
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
-                if (!bSnap.exists()) return;
+                if(!bSnap.exists()) return;
                 const tasks = bSnap.data().tasks;
                 const idx = tasks.findIndex(t => t.id === tid);
-                if (idx > -1) {
+                if(idx > -1) {
                     tasks[idx].status = "Todo";
                     tx.update(boardRef, { tasks: tasks });
                 }
@@ -699,92 +589,60 @@
             console.error("Restore failed:", e);
             alert("Failed to restore task.");
         }
-    };
+    }
 
-    // ---------------- REPORTING ----------------
+    // --- REPORTING SYSTEM ---
     window.switchReportTab = function(tabName) {
-        console.log("[DEBUG] switchReportTab:", tabName);
         document.getElementById('viewActivity').style.display = tabName === 'activity' ? 'block' : 'none';
-        document.getElementById('viewTask').style.display     = tabName === 'task'     ? 'block' : 'none';
+        document.getElementById('viewTask').style.display = tabName === 'task' ? 'block' : 'none';
         document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
         document.getElementById('tabTask').classList.toggle('active', tabName === 'task');
-
-        if (tabName === 'activity') {
-            updateReportPeriod('daily', document.querySelector('#viewActivity .time-filter-btn')); 
-        }
-        if (tabName === 'task') {
-            generateTaskChart(); 
-        }
-    };
+        if(tabName === 'activity') updateReportPeriod('daily', document.querySelector('#viewActivity .time-filter-btn')); 
+        if(tabName === 'task') generateTaskChart(); 
+    }
 
     window.updateReportPeriod = function(period, btnEl) {
-        console.log("[DEBUG] updateReportPeriod:", period);
         document.querySelectorAll('#viewActivity .time-filter-btn').forEach(b => b.classList.remove('active'));
         if (btnEl) btnEl.classList.add('active');
 
         let labels = [], data = [];
         
-        const todayMins  = parseInt(document.getElementById("repMinutes").textContent) || 0;
-        const todayPomo  = parseInt(document.getElementById("repPomos").textContent)   || 0;
-        const todayBreak = parseInt(document.getElementById("repBreaks").textContent)  || 0;
+        const todayMins = parseInt(document.getElementById("repMinutes").textContent) || 0;
+        const todayPomo = parseInt(document.getElementById("repPomos").textContent) || 0;
+        const todayBreak = parseInt(document.getElementById("repBreaks").textContent) || 0;
 
         if (period === 'daily') {
             labels = ["Pomodoros", "Mins", "Breaks"];
-            data   = [todayPomo, todayMins, todayBreak];
+            data = [todayPomo, todayMins, todayBreak];
             renderActivityChart(labels, data, 'bar', 'Today Activity');
         } else if (period === 'weekly') {
             labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-            data   = [0, 0, 0, 0, 0, 0, 0];
+            data = [0, 0, 0, 0, 0, 0, 0];
             const dayIndex = (new Date().getDay() + 6) % 7; 
             data[dayIndex] = todayMins;
             renderActivityChart(labels, data, 'bar', 'Weekly Activity (Mins)');
         } else {
             labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
-            data   = [todayMins, 0, 0, 0];
+            data = [0, 0, 0, 0];
+            data[0] = todayMins; 
             renderActivityChart(labels, data, 'line', 'Monthly Activity (Mins)');
         }
-    };
+    }
 
     function renderActivityChart(labels, data, type, label) {
-        console.log("[DEBUG] renderActivityChart type:", type, "labels:", labels, "data:", data);
         const ctx = document.getElementById('activityChart').getContext('2d');
         if (activityChartInstance) activityChartInstance.destroy();
         activityChartInstance = new Chart(ctx, {
             type: type,
-            data: { 
-                labels: labels, 
-                datasets: [{
-                    label: label, 
-                    data: data, 
-                    backgroundColor: '#4ade80', 
-                    borderColor: '#4ade80', 
-                    tension: 0.1, 
-                    borderRadius: 4 
-                }] 
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { legend: { display: false } }, 
-                scales: { 
-                    y: { 
-                        beginAtZero: true, 
-                        grid: { color: 'rgba(255,255,255,0.1)' }, 
-                        ticks: { color: '#94a3b8' } 
-                    }, 
-                    x: { 
-                        grid: { display: false }, 
-                        ticks: { color: '#94a3b8' } 
-                    } 
-                } 
-            }
+            data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: '#4ade80', borderColor: '#4ade80', tension: 0.1, borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
         });
     }
 
+    // --- TASK CHART (NO BUTTONS, TOTAL ONLY) ---
     function generateTaskChart() {
-        console.log("[DEBUG] generateTaskChart()");
         const labels = [];
-        const data   = [];
+        const data = [];
         const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
         const rankList = document.getElementById("rankingList");
         rankList.innerHTML = "";
@@ -792,7 +650,7 @@
         const sorted = [...cachedTasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
 
         sorted.forEach((t) => {
-            if ((t.focus_minutes || 0) > 0) {
+            if((t.focus_minutes || 0) > 0) {
                 labels.push(t.name);
                 data.push(t.focus_minutes); 
                 
@@ -808,9 +666,7 @@
             }
         });
 
-        if (data.length === 0) {
-            rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No tasks focused yet.</li>';
-        }
+        if (data.length === 0) rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No tasks focused yet.</li>';
 
         const ctx = document.getElementById('taskChart').getContext('2d');
         if (taskChartInstance) taskChartInstance.destroy();
@@ -818,51 +674,57 @@
         taskChartInstance = new Chart(ctx, {
             type: 'doughnut',
             data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { 
-                        position: 'right', 
-                        labels: { color: 'white', boxWidth: 10, font: {size: 10} } 
-                    } 
-                } 
-            }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', boxWidth: 10, font: {size: 10} } } } }
         });
     }
 
-    // ---------------- USER STATS + TASK LOADING ----------------
+    async function init() {
+        updateTimeDisplay();
+        await loadUserStats();
+        await loadBoardTasksIntoDropdown();
+        applyTheme(activeTheme);
+        document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        
+        ['work', 'short', 'long'].forEach(mode => {
+            document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
+                durations[mode] = parseInt(e.target.value) || 1;
+                if(currentMode === mode && !timerInterval) {
+                    remainingSeconds = durations[mode] * 60;
+                    // NEW: keep session total in sync with changed duration
+                    sessionTotalSeconds = remainingSeconds;
+                    updateTimeDisplay();
+                }
+            });
+        });
+        document.getElementById("intervalSlider").addEventListener('input', (e) => {
+             longBreakInterval = parseInt(e.target.value); document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        });
+        document.querySelectorAll(".test-btn").forEach(btn => {
+            btn.onclick = () => playSound(document.getElementById(btn.dataset.target).value);
+        });
+
+        // Subscribe to Firestore commands from bot
+        subscribeToBotCommandsFirestore();
+    }
+
     async function loadUserStats() {
         try {
             const today = new Date().toISOString().slice(0, 10);
             const ref = doc(db, "users", userId);
             let snap = await getDoc(ref);
-            if (!snap.exists()) {
-                await setDoc(ref, { today_date: today });
-                snap = await getDoc(ref);
-            }
+            if (!snap.exists()) { await setDoc(ref, { today_date: today }); snap = await getDoc(ref); }
             let data = snap.data();
             if (data.today_date !== today) {
-                await updateDoc(ref, { 
-                    today_date: today, 
-                    today_pomodoros: 0, 
-                    today_focus_minutes: 0, 
-                    breaks_today: 0 
-                });
+                await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
                 data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
             }
             userStatsDocCache = ref;
-            currentStreak     = data.current_streak || 0;
+            currentStreak = data.current_streak || 0;
             updateStreakUI();
-
-            document.getElementById("repPomos").textContent   = data.today_pomodoros   || 0;
+            document.getElementById("repPomos").textContent = data.today_pomodoros || 0;
             document.getElementById("repMinutes").textContent = data.today_focus_minutes || 0;
-            document.getElementById("repBreaks").textContent  = data.breaks_today      || 0;
-
-            console.log("[DEBUG] loadUserStats:", data);
-        } catch (err) { 
-            console.error("[DEBUG] loadUserStats error:", err); 
-        }
+            document.getElementById("repBreaks").textContent = data.breaks_today || 0;
+        } catch (err) { console.error(err); }
     }
 
     async function loadBoardTasksIntoDropdown() {
@@ -870,11 +732,9 @@
             const boardRef = doc(db, "boards", boardId);
             const snap = await getDoc(boardRef);
             if (!snap.exists()) return;
-
             const bData = snap.data();
             const tasks = bData.tasks || [];
             cachedTasks = tasks;
-
             const projects = bData.projects || [];
             const projectById = {};
             projects.forEach(p => projectById[p.id] = p);
@@ -892,203 +752,158 @@
                 opt.textContent = `${dispName} • ${projName}`;
                 taskSelect.appendChild(opt);
             });
-
-            console.log("[DEBUG] loadBoardTasksIntoDropdown - tasks:", tasks.length);
-        } catch (err) { 
-            console.error("[DEBUG] loadBoardTasksIntoDropdown error:", err); 
-        }
+        } catch (err) { console.error(err); }
     }
     
     async function updateStats(mins) {
         if (!userStatsDocCache) return;
-        console.log("[DEBUG] updateStats mins:", mins);
-        await updateDoc(userStatsDocCache, { 
-            today_pomodoros:    increment(1), 
-            today_focus_minutes: increment(mins), 
-            current_streak:      currentStreak 
-        });
-        const minsEl = document.getElementById("repMinutes"); 
-        const pomoEl = document.getElementById("repPomos");
-        minsEl.textContent = parseInt(minsEl.textContent) + mins; 
-        pomoEl.textContent = parseInt(pomoEl.textContent) + 1;
+        await updateDoc(userStatsDocCache, { today_pomodoros: increment(1), today_focus_minutes: increment(mins), current_streak: currentStreak });
+        const minsEl = document.getElementById("repMinutes"); const pomoEl = document.getElementById("repPomos");
+        minsEl.textContent = parseInt(minsEl.textContent) + mins; pomoEl.textContent = parseInt(pomoEl.textContent) + 1;
     }
 
     async function updateBreakStats() {
         if (!userStatsDocCache) return;
-        console.log("[DEBUG] updateBreakStats");
         await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
-        const brkEl = document.getElementById("repBreaks"); 
-        brkEl.textContent = parseInt(brkEl.textContent) + 1;
+        const brkEl = document.getElementById("repBreaks"); brkEl.textContent = parseInt(brkEl.textContent) + 1;
     }
 
     async function updateTaskStatsOnly(tid, mins) {
-        console.log("[DEBUG] updateTaskStatsOnly tid:", tid, "mins:", mins);
         const task = cachedTasks.find(t => t.id === tid);
-        if (task) {
-            task.focus_minutes  = (task.focus_minutes  || 0) + mins;
-            task.pomodoro_count = (task.pomodoro_count || 0) + 1;
-        }
+        if(task) { task.focus_minutes = (task.focus_minutes || 0) + mins; task.pomodoro_count = (task.pomodoro_count || 0) + 1; }
         try {
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
-                if (!bSnap.exists()) return;
+                if(!bSnap.exists()) return;
                 const tasks = bSnap.data().tasks;
-                const idx   = tasks.findIndex(t => t.id === tid);
-                if (idx > -1) {
-                    tasks[idx].focus_minutes  = (tasks[idx].focus_minutes  || 0) + mins;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
                     tasks[idx].pomodoro_count = (tasks[idx].pomodoro_count || 0) + 1;
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
-        } catch(e) { 
-            console.error("[DEBUG] updateTaskStatsOnly error:", e); 
-        }
+        } catch(e) { console.error(e); }
     }
     
     async function markTaskAsDone(tid, mins) {
-        console.log("[DEBUG] markTaskAsDone tid:", tid, "mins:", mins);
         try {
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
-                if (!bSnap.exists()) return;
+                if(!bSnap.exists()) return;
                 const tasks = bSnap.data().tasks;
-                const idx   = tasks.findIndex(t => t.id === tid);
-                if (idx > -1) {
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
                     tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
-                    tasks[idx].status        = "Done";
+                    tasks[idx].status = "Done";
+                    tasks[idx].completed_at = new Date().toISOString();
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
         } catch(e) { 
-            console.error("[DEBUG] markTaskAsDone error:", e); 
+            console.error(e); 
             alert("Failed to mark as done. Please check your connection.");
         }
     }
 
-    // ---------------- THEME & MODALS ----------------
     function applyTheme(name) {
         activeTheme = name;
         const t = themes[name];
-        root.style.setProperty("--bg-work",  t.work);
-        root.style.setProperty("--bg-short", t.short);
-        root.style.setProperty("--bg-long",  t.long);
-
+        root.style.setProperty("--bg-work",  t.work); root.style.setProperty("--bg-short", t.short); root.style.setProperty("--bg-long",  t.long);
         let color = "var(--bg-work)";
-        if (currentMode === "short") color = "var(--bg-short)";
-        if (currentMode === "long")  color = "var(--bg-long)";
+        if (currentMode === "short") color = "var(--bg-short)"; if (currentMode === "long")  color = "var(--bg-long)";
         root.style.setProperty("--bg-current", color);
-
-        document.querySelectorAll(".theme-swatch").forEach(el => 
-            el.classList.toggle("selected", el.dataset.theme === name)
-        );
+        document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("selected", el.dataset.theme === name));
     }
     
     const settingsModal = document.getElementById("settingsModal");
-    const reportModal   = document.getElementById("reportModal");
+    const reportModal = document.getElementById("reportModal");
     document.getElementById("openSettingsBtn").onclick = () => settingsModal.classList.add("open");
     document.getElementById("closeSettingsBtn").onclick = () => settingsModal.classList.remove("open");
-    document.getElementById("openReportBtn").onclick   = () => { 
-        reportModal.classList.add("open"); 
-        switchReportTab('activity'); 
-    };
-    document.getElementById("closeReportBtn").onclick  = () => reportModal.classList.remove("open");
-    document.querySelectorAll(".theme-swatch").forEach(s => 
-        s.onclick = () => applyTheme(s.dataset.theme)
-    );
+    document.getElementById("openReportBtn").onclick = () => { reportModal.classList.add("open"); switchReportTab('activity'); };
+    document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
+    document.querySelectorAll(".theme-swatch").forEach(s => s.onclick = () => applyTheme(s.dataset.theme));
 
-    // ---------------- BOT COMMAND LISTENER (KEY PART) ----------------
-    function subscribeToBotCommands() {
-        console.log("[DEBUG] subscribeToBotCommands() for userId:", userId);
-        onSnapshot(sessionRef, (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            console.log("[DEBUG] Firestore session snapshot:", data);
+    // -----------------------------
+    // Firestore command listener
+    // -----------------------------
+    let lastCommandId = null;
 
-            const cmdId  = data.commandId;
-            const cmd    = data.command;
+    function unwrapFirestoreVal(v) {
+        // If using REST/structured fields the value might be { stringValue: "..." }
+        if (!v) return null;
+        if (typeof v === "object" && v.stringValue !== undefined) return v.stringValue;
+        return v;
+    }
 
-            if (!cmdId || cmdId === lastCommandId) {
-                return; // no new command
-            }
-            lastCommandId = cmdId;
+    function subscribeToBotCommandsFirestore() {
+        try {
+            console.log("[DEBUG] subscribeToBotCommandsFirestore for user:", userId);
+            const sessionDocRef = doc(db, "active_sessions", userId);
+            onSnapshot(sessionDocRef, async (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+                if (!data) return;
+                console.log("[DEBUG] active_sessions snapshot:", data);
 
-            if (cmd === "TAKE_BREAK") {
-                console.log("[DEBUG] Bot command -> TAKE_BREAK");
-                handleBreakDecision('take');
-            } else if (cmd === "SKIP_BREAK") {
-                console.log("[DEBUG] Bot command -> SKIP_BREAK");
-                handleBreakDecision('skip');
-            } else if (cmd === "FINISH_EARLY") {
-                console.log("[DEBUG] Bot command -> FINISH_EARLY");
-                if (timerInterval) {
-                    // behave like clicking finish button (no confirm)
-                    stopTimer();
-                    (async () => {
+                // data may have fields as { stringValue: ... } if written via REST
+                const rawCommand = data.command || data.command;
+                const rawCommandId = data.commandId || data.commandId;
+                const command = unwrapFirestoreVal(rawCommand);
+                const commandId = unwrapFirestoreVal(rawCommandId);
+
+                if (!commandId || commandId === lastCommandId) return;
+                lastCommandId = commandId;
+
+                console.log("[DEBUG] Received command:", command, "id:", commandId);
+
+                if (command === "TAKE_BREAK") {
+                    console.log("[DEBUG] command -> TAKE_BREAK");
+                    handleBreakDecision('take');
+                }
+                else if (command === "SKIP_BREAK") {
+                    console.log("[DEBUG] command -> SKIP_BREAK");
+                    handleBreakDecision('skip');
+                }
+                else if (command === "FINISH_EARLY") {
+                    console.log("[DEBUG] command -> FINISH_EARLY");
+                    if (timerInterval) {
+                        // Emulate the finish flow without user confirm
+                        stopTimer();
                         playSound('digital');
                         const totalSeconds   = sessionTotalSeconds || durations.work * 60;
                         const elapsedSeconds = totalSeconds - remainingSeconds;
                         const minsSpent      = Math.max(1, Math.ceil(elapsedSeconds / 60));
                         const tid            = taskSelect.value;
-                        console.log("[DEBUG] FINISH_EARLY from bot - elapsed:", elapsedSeconds, "mins:", minsSpent, "taskId:", tid);
+                        console.log("[DEBUG] FINISH_EARLY processing:", { elapsedSeconds, minsSpent, tid });
 
                         if (tid) {
                             await updateStats(minsSpent);
                             await markTaskAsDone(tid, minsSpent);
                             await logDailyTaskWork(tid, minsSpent);
                         }
+                        // Reset timer for next session
                         remainingSeconds    = durations.work * 60;
                         sessionTotalSeconds = remainingSeconds;
                         updateTimeDisplay();
                         await loadBoardTasksIntoDropdown();
                         showBreakDecisionModal();
-                    })();
-                }
-            }
-        });
-    }
-
-    // ---------------- INIT ----------------
-    async function init() {
-        console.log("[DEBUG] init() starting");
-        updateTimeDisplay();
-        await loadUserStats();
-        await loadBoardTasksIntoDropdown();
-        applyTheme(activeTheme);
-
-        document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
-        
-        ['work', 'short', 'long'].forEach(mode => {
-            document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
-                durations[mode] = parseInt(e.target.value) || 1;
-                if (currentMode === mode && !timerInterval) {
-                    remainingSeconds    = durations[mode] * 60;
-                    sessionTotalSeconds = remainingSeconds;
-                    console.log("[DEBUG] Duration change mode:", mode, "seconds:", remainingSeconds);
-                    updateTimeDisplay();
+                    } else {
+                        // If no timer running, still mark as done quickly
+                        const tid = taskSelect.value;
+                        if (tid) {
+                            await markTaskAsDone(tid, 0);
+                        }
+                    }
+                } else {
+                    console.log("[DEBUG] Unknown command:", command);
                 }
             });
-        });
-
-        document.getElementById("intervalSlider").addEventListener('input', (e) => {
-            longBreakInterval = parseInt(e.target.value);
-            document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
-            console.log("[DEBUG] longBreakInterval changed:", longBreakInterval);
-        });
-
-        document.querySelectorAll(".test-btn").forEach(btn => {
-            btn.onclick = () => {
-                const t = document.getElementById(btn.dataset.target).value;
-                console.log("[DEBUG] Test sound:", t);
-                playSound(t);
-            };
-        });
-
-        // listen for bot commands via Firestore
-        subscribeToBotCommands();
-
-        console.log("[DEBUG] init() finished");
+        } catch (err) {
+            console.error("[ERROR] subscribeToBotCommandsFirestore:", err);
+        }
     }
 
     init();
