@@ -427,6 +427,30 @@
     document.getElementById("btnShort").onclick = () => switchMode("short");
     document.getElementById("btnLong").onclick = () => switchMode("long");
     
+    // --------------------------------------------------------------------------------
+    // NEW FUNCTION: Notify Bot via Incoming Webhook
+    // --------------------------------------------------------------------------------
+    async function notifyBot(type, taskName, duration) {
+        const webhookUrl = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360";
+        const data = {
+            type: type, // 'start' or 'end'
+            task: taskName || "Focus Session",
+            duration: duration || 0,
+            userId: userId,
+            boardId: boardId
+        };
+        try {
+            await fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            console.log("Bot notified:", type);
+        } catch (error) {
+            console.error("Failed to notify bot:", error);
+        }
+    }
+    
     document.getElementById("startBtn").onclick = () => {
         if (timerInterval) { stopTimer(); } 
         else {
@@ -439,7 +463,14 @@
         startBtn.textContent = "PAUSE";
         startBtn.style.transform = "translateY(4px)";
         startBtn.style.boxShadow = "none";
-        if (currentMode === "work") finishBtn.style.display = 'flex';
+        
+        // NOTIFY BOT ON START
+        if (currentMode === "work") {
+            finishBtn.style.display = 'flex';
+            const taskName = taskSelect.options[taskSelect.selectedIndex].text;
+            notifyBot("start", taskName, durations.work);
+        }
+
         if (document.getElementById("tickToggle").checked) startTicking();
         timerInterval = setInterval(() => {
             remainingSeconds--;
@@ -466,10 +497,14 @@
         const elapsedSeconds = totalSeconds - remainingSeconds;
         const minsSpent = Math.max(1, Math.ceil(elapsedSeconds / 60));
         const tid = taskSelect.value;
+        const taskName = taskSelect.options[taskSelect.selectedIndex].text;
+
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
             await logDailyTaskWork(tid, minsSpent);
+            // Notify bot session ended early manually
+            notifyBot("end", taskName, minsSpent);
         }
         // Reset to full focus duration for next session
         remainingSeconds = durations.work * 60;
@@ -491,10 +526,16 @@
             playSound(document.getElementById("workSoundType").value);
             await updateStats(mins);
             const tid = taskSelect.value;
+            const taskName = taskSelect.options[taskSelect.selectedIndex].text;
+            
             if (tid) {
                 await updateTaskStatsOnly(tid, mins);
                 await logDailyTaskWork(tid, mins);
             }
+            
+            // NOTIFY BOT ON END
+            notifyBot("end", taskName, mins);
+            
             showBreakDecisionModal();
         } else {
             playSound(document.getElementById("breakSoundType").value);
@@ -826,13 +867,12 @@
     document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
     document.querySelectorAll(".theme-swatch").forEach(s => s.onclick = () => applyTheme(s.dataset.theme));
 
-    // -----------------------------
-    // Firestore command listener
-    // -----------------------------
+    // ------------------------------------------------------------
+    // FIRESTORE COMMAND LISTENER (From Bot)
+    // ------------------------------------------------------------
     let lastCommandId = null;
 
     function unwrapFirestoreVal(v) {
-        // If using REST/structured fields the value might be { stringValue: "..." }
         if (!v) return null;
         if (typeof v === "object" && v.stringValue !== undefined) return v.stringValue;
         return v;
@@ -848,7 +888,6 @@
                 if (!data) return;
                 console.log("[DEBUG] active_sessions snapshot:", data);
 
-                // data may have fields as { stringValue: ... } if written via REST
                 const rawCommand = data.command || data.command;
                 const rawCommandId = data.commandId || data.commandId;
                 const command = unwrapFirestoreVal(rawCommand);
@@ -870,7 +909,6 @@
                 else if (command === "FINISH_EARLY") {
                     console.log("[DEBUG] command -> FINISH_EARLY");
                     if (timerInterval) {
-                        // Emulate the finish flow without user confirm
                         stopTimer();
                         playSound('digital');
                         const totalSeconds   = sessionTotalSeconds || durations.work * 60;
