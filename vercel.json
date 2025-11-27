@@ -1,5 +1,3 @@
-vercel.json 
-
 
 {
   "headers": [
@@ -17,4 +15,5 @@ vercel.json
       ]
     }
   ]
+
 }
