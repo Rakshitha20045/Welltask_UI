@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Focus Hub | WellTask</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-work: #2a9d8f;
+            --bg-short: #457b9d;
+            --bg-long: #6d597a;
+            --bg-current: var(--bg-work);
+            --card-dark: #1e293b;
+            --text-white: #ffffff;
+            --radius-main: 6px;
+            --radius-card: 12px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0; font-family: 'Inter', sans-serif;
+            background-color: var(--bg-current); color: var(--text-white);
+            transition: background-color 0.4s ease; min-height: 100vh;
+            display: flex; flex-direction: column;
+        }
+
+        /* Header */
+        .app-header { max-width: 620px; margin: 0 auto; width: 100%; padding: 20px 12px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .header-actions { display: flex; gap: 10px; }
+        .header-btn {
+            background: rgba(255, 255, 255, 0.2); border: none; padding: 8px 16px;
+            border-radius: 4px; color: white; font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; gap: 6px; transition: background 0.2s;
+        }
+        .header-btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+        /* Timer Area */
+        .main-container { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 20px; width: 100%; max-width: 480px; margin: 0 auto; }
+        .timer-box { background-color: rgba(255, 255, 255, 0.1); padding: 30px 40px; border-radius: var(--radius-main); text-align: center; width: 100%; margin-bottom: 25px; position: relative; }
+        .timer-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { background: none; border: none; color: var(--text-white); font-size: 14px; opacity: 0.6; cursor: pointer; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+        .tab-btn.active { background: rgba(0, 0, 0, 0.15); font-weight: 700; opacity: 1; }
+        .time-big { font-size: 100px; font-weight: 700; line-height: 1; margin: 10px 0 30px 0; font-variant-numeric: tabular-nums; text-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .controls-row { display: flex; justify-content: center; gap: 15px; align-items: center; }
+        .start-btn { background: white; color: var(--bg-current); border: none; font-size: 22px; font-weight: 700; padding: 16px 40px; border-radius: 4px; cursor: pointer; width: 180px; text-transform: uppercase; box-shadow: 0 6px 0 rgb(235, 235, 235); transition: all 0.1s; }
+        .start-btn:active { transform: translateY(4px); box-shadow: none; }
+        .finish-btn { background: transparent; border: 2px solid rgba(255,255,255,0.4); color: white; width: 50px; height: 50px; border-radius: 8px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .finish-btn:hover { background: rgba(255,255,255,0.2); border-color: white; }
+        
+        .current-task-section { width: 100%; text-align: center; position: relative;}
+        .task-controls { display: flex; gap: 10px; justify-content: center; align-items: center; width: 100%; }
+        .task-label { font-size: 14px; opacity: 0.8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .main-task-select { 
+            flex: 1; background: rgba(0,0,0,0.15); border: 2px dashed rgba(255,255,255,0.4); 
+            color: white; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; 
+            cursor: pointer; text-align: center; appearance: none; font-weight: 600;
+            text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+        }
+        .main-task-select option { background: var(--card-dark); color: white; text-align: left; }
+        
+        .restore-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: #ddd; width: 45px; height: 45px; border-radius: 8px;
+            font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .restore-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* Modals */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: flex-start; z-index: 2000; padding: 20px; overflow-y: auto; }
+        .modal-overlay.open { display: flex; }
+        .modal-content { width: 100%; max-width: 550px; margin-top: 40px; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; color: #ddd; }
+        .close-btn { background: none; border: none; color: #aaa; font-size: 24px; cursor: pointer; }
+        .dark-card { background: var(--card-dark); border-radius: var(--radius-card); padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); }
+        .card-title { font-size: 14px; font-weight: 700; color: #94a3b8; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+
+        /* Report Specifics */
+        .report-nav { display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .report-tab { background: none; border: none; color: #94a3b8; font-size: 14px; font-weight: 600; cursor: pointer; padding-bottom: 5px; }
+        .report-tab.active { color: white; border-bottom: 2px solid white; }
+        .time-filter-row { display:flex; gap:8px; margin-bottom:15px; justify-content: center; }
+        .time-filter-btn { background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#ccc; padding: 6px 14px; border-radius: 20px; font-size:12px; cursor:pointer; transition: all 0.2s; }
+        .time-filter-btn.active { background: #4ade80; color: #0f172a; font-weight:700; border-color:#4ade80; }
+        .report-summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .summary-card { flex: 1; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center; }
+        .sum-val { font-size: 20px; font-weight: 700; color: #4ade80; }
+        .sum-lbl { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-top: 5px; }
+        .chart-container { position: relative; height: 220px; width: 100%; margin-bottom: 20px; }
+        .ranking-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+        .ranking-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .rank-name { font-size: 13px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+        .rank-bar-bg { flex: 1; height: 6px; background: rgba(255,255,255,0.1); margin: 0 15px; border-radius: 3px; overflow: hidden; }
+        .rank-bar-fill { height: 100%; background: #4ade80; }
+        .rank-time { font-size: 12px; color: #94a3b8; min-width: 45px; text-align: right; }
+        
+        .restore-list-btn {
+            background: none; border: 1px solid #4ade80; color: #4ade80; padding: 4px 10px;
+            border-radius: 4px; font-size: 11px; cursor: pointer; transition: 0.2s;
+        }
+        .restore-list-btn:hover { background: #4ade80; color: #0f172a; }
+
+        /* Break Modal */
+        .break-option-btn { width: 100%; padding: 15px; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.2); color: white; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+        .break-option-btn:hover { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+        .break-option-btn strong { display: block; font-size: 15px; margin-bottom: 2px; }
+        .break-option-btn small { font-size: 11px; color: #94a3b8; }
+
+        /* Inputs & Themes */
+        label { display: block; font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
+        select, input[type="number"] { width: 100%; background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 6px; color: white; font-size: 14px; outline: none; }
+        input[type="range"] { width: 100%; accent-color: var(--bg-current); }
+        .row-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .theme-row { display: flex; gap: 12px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+        .theme-swatch { width: 40px; height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; transition: transform 0.2s; }
+        .theme-swatch:hover { transform: scale(1.1); }
+        .theme-swatch.selected { border-color: white; box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background-color: #334155; border-radius: 34px; transition: .4s; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--bg-current); }
+        input:checked + .slider:before { transform: translateX(18px); }
+        .sound-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .sound-col { flex: 1; }
+    </style>
+</head>
+<body>
+
+<header class="app-header">
+    <div class="logo">Focus Hub</div>
+    <div class="header-actions">
+        <div style="background:rgba(0,0,0,0.2); padding:4px 10px; border-radius:20px; font-size:12px; display:flex; align-items:center; gap:6px;">
+            <span style="width:6px;height:6px;background:#4ade80;border-radius:50%;"></span>
+            <span id="userLabel">Guest</span>
+        </div>
+        <button class="header-btn" id="openReportBtn">📊 Report</button>
+        <button class="header-btn" id="openSettingsBtn">⚙️ Setting</button>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="timer-box">
+        <div class="timer-tabs">
+            <button class="tab-btn active" data-mode="work" id="btnWork">Pomodoro</button>
+            <button class="tab-btn" data-mode="short" id="btnShort">Short Break</button>
+            <button class="tab-btn" data-mode="long" id="btnLong">Long Break</button>
+        </div>
+
+        <div class="time-big" id="timeDisplay">25:00</div>
+
+        <div class="controls-row">
+            <button class="start-btn" id="startBtn">START</button>
+            <button class="finish-btn" id="finishTaskBtn" title="Complete Task & Finish Early" style="display:none;">✔</button>
+        </div>
+        
+        <div id="streakBadge" style="margin-top:20px; font-size:14px; color:#4ade80; font-weight:600; opacity:0; transition:opacity 0.5s;">
+            🔥 Streak: <span id="streakCount">0</span>
+        </div>
+    </div>
+
+    <div class="current-task-section">
+        <div class="task-label">Currently Focusing On</div>
+        <div class="task-controls">
+            <select class="main-task-select" id="focusTaskSelect">
+                <option value="">(Select a Task to Start)</option>
+                <option value="" disabled>Loading tasks...</option>
+            </select>
+            <button class="restore-btn" id="openRestoreBtn" title="Restore Completed Tasks">↺</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="breakModal">
+    <div class="modal-content" style="max-width:400px; text-align:center;">
+        <h2 style="margin-top:0;">Session Complete! 🎉</h2>
+        <p style="color:#cbd5e1; margin-bottom:20px;">Prioritize your wellness. What's next?</p>
+        <button class="break-option-btn" onclick="handleBreakDecision('take')"><div style="font-size:24px;">☕</div><div><strong>Take a Break</strong><small>Recommended. Increases Streak 🔥</small></div></button>
+        <button class="break-option-btn" onclick="handleBreakDecision('skip')"><div style="font-size:24px;">⏭</div><div><strong>Skip Break</strong><small>Go back to work. Streak Resets.</small></div></button>
+        <button class="break-option-btn" onclick="handleBreakDecision('remind')"><div style="font-size:24px;">⏰</div><div><strong>Remind Me Later</strong><small>Add 5 mins to current session.</small></div></button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="restoreModal">
+    <div class="modal-content">
+        <div class="modal-header"><h3>RESTORE TASKS</h3><button class="close-btn" id="closeRestoreBtn">✕</button></div>
+        <div class="dark-card">
+            <p style="font-size:13px; color:#94a3b8; margin-bottom:15px;">These tasks are marked as "Done". Click <b>Restore</b> to continue working on them.</p>
+            <ul class="ranking-list" id="restoreList">
+                <li class="ranking-item" style="text-align:center; color:#666;">No completed tasks found.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal-content">
+        <div class="modal-header"><h3>SETTINGS</h3><button class="close-btn" id="closeSettingsBtn">✕</button></div>
+        <div class="dark-card">
+            <div class="card-title">⏱ Durations (Minutes)</div>
+            <div class="row-inputs">
+                <div><label>Focus</label><input type="number" id="workDuration" value="25" min="1"></div>
+                <div><label>Short</label><input type="number" id="shortDuration" value="5" min="1"></div>
+                <div><label>Long</label><input type="number" id="longDuration" value="15" min="1"></div>
+            </div>
+            <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <label>Long Break Interval</label><span id="intervalDisplay" style="font-size:12px; font-weight:700; color:#4ade80;">4 Pomodoros</span>
+                </div>
+                <input type="range" id="intervalSlider" min="1" max="8" value="4" step="1">
+            </div>
+        </div>
+        <div class="dark-card">
+            <div class="card-title">🔊 Sound</div>
+            <div class="sound-row">
+                <div class="sound-col">
+                    <label>Focus End</label><select id="workSoundType" style="margin-bottom:4px;"><option value="digital">Digital</option><option value="bell">Bell</option><option value="melody">Melody</option></select>
+                    <button class="test-btn" data-target="workSoundType" style="width:100%;background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;padding:4px;">Test Sound</button>
+                </div>
+                <div class="sound-col">
+                    <label>Break End</label><select id="breakSoundType" style="margin-bottom:4px;"><option value="melody">Melody</option><option value="digital">Digital</option><option value="bell">Bell</option></select>
+                    <button class="test-btn" data-target="breakSoundType" style="width:100%;background:#334155;border:none;color:white;border-radius:4px;cursor:pointer;padding:4px;">Test Sound</button>
+                </div>
+            </div>
+            <div class="input-group"><label>Volume</label><input type="range" id="volumeSlider" min="0" max="100" value="50"></div>
+            <div class="toggle-row" style="margin-top:10px;"><span class="toggle-label">Ticking Sound</span><label class="switch"><input type="checkbox" id="tickToggle"><span class="slider"></span></label></div>
+        </div>
+        <div class="dark-card">
+            <div class="card-title">🎨 Color Themes</div>
+            <div class="theme-row">
+                <div class="theme-swatch selected" style="background:#2a9d8f;" data-theme="teal"></div>
+                <div class="theme-swatch" style="background:#db524d;" data-theme="red"></div>
+                <div class="theme-swatch" style="background:#3b82f6;" data-theme="blue"></div>
+                <div class="theme-swatch" style="background:#8b5cf6;" data-theme="purple"></div>
+                <div class="theme-swatch" style="background:#f97316;" data-theme="orange"></div>
+                <div class="theme-swatch" style="background:#ec4899;" data-theme="pink"></div>
+                <div class="theme-swatch" style="background:#475569;" data-theme="slate"></div>
+            </div>
+        </div>
+        <div class="dark-card">
+            <div class="card-title">🌱 Wellness & Auto</div>
+            <div class="toggle-row"><span class="toggle-label">Hydration</span><label class="switch"><input type="checkbox" id="waterToggle"><span class="slider"></span></label></div>
+            <div class="toggle-row"><span class="toggle-label">Stretch</span><label class="switch"><input type="checkbox" id="stretchToggle"><span class="slider"></span></label></div>
+            <div class="toggle-row"><span class="toggle-label">Auto-start Timer</span><label class="switch"><input type="checkbox" id="autoSwitchToggle" checked><span class="slider"></span></label></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="reportModal">
+    <div class="modal-content">
+        <div class="modal-header"><h3>ACTIVITY REPORT</h3><button class="close-btn" id="closeReportBtn">✕</button></div>
+        <div class="dark-card">
+            <nav class="report-nav">
+                <button class="report-tab active" onclick="switchReportTab('activity')" id="tabActivity">Activity</button>
+                <button class="report-tab" onclick="switchReportTab('task')" id="tabTask">Task Distribution</button>
+            </nav>
+
+            <div id="viewActivity">
+                <div class="time-filter-row">
+                    <!-- FIX: pass this to updateReportPeriod -->
+                    <button class="time-filter-btn active" onclick="updateReportPeriod('daily', this)">Daily</button>
+                    <button class="time-filter-btn" onclick="updateReportPeriod('weekly', this)">Weekly</button>
+                    <button class="time-filter-btn" onclick="updateReportPeriod('monthly', this)">Monthly</button>
+                </div>
+                <div class="report-summary-row">
+                    <div class="summary-card"><div class="sum-val" id="repPomos">0</div><div class="sum-lbl">Pomodoros</div></div>
+                    <div class="summary-card"><div class="sum-val" id="repMinutes">0</div><div class="sum-lbl">Minutes</div></div>
+                    <div class="summary-card"><div class="sum-val" id="repBreaks">0</div><div class="sum-lbl">Breaks</div></div>
+                </div>
+                <div class="card-title">Productivity Chart</div>
+                <div class="chart-container"><canvas id="activityChart"></canvas></div>
+            </div>
+
+            <div id="viewTask" style="display:none;">
+                <div class="card-title">Total Time Distribution</div>
+                <div class="chart-container" style="height:200px; margin-bottom:20px;">
+                    <canvas id="taskChart"></canvas>
+                </div>
+                <div class="card-title">Task Ranking (By Focus Time)</div>
+                <ul class="ranking-list" id="rankingList">
+                    <li class="ranking-item" style="color:#aaa; text-align:center;">No data available</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
+      authDomain: "welltask-8bbcf.firebaseapp.com",
+      projectId: "welltask-8bbcf",
+      storageBucket: "welltask-8bbcf.firebasestorage.app",
+      messagingSenderId: "533119656804",
+      appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
+      measurementId: "G-3HD74YPC52"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    const params   = new URLSearchParams(window.location.search);
+    const userId   = params.get("userId")   || "demo-user";
+    const userName = params.get("userName") || "User";
+    const boardId  = params.get("boardId")  || userId;
+
+    document.getElementById("userLabel").textContent = userName;
+
+    let currentMode = "work";
+    let durations = { work: 25, short: 5, long: 15 };
+    let remainingSeconds = 25 * 60;
+    // NEW: track total seconds for the CURRENT session
+    let sessionTotalSeconds = remainingSeconds;
+
+    let timerInterval = null;
+    let tickInterval = null;
+    let userStatsDocCache = null;
+    let pomodoroCycleCount = 0; 
+    let longBreakInterval  = 4; 
+    let currentStreak = 0;
+    let activityChartInstance = null;
+    let taskChartInstance = null;
+    let cachedTasks = [];
+
+    const themes = {
+        teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
+        red:    { work: '#db524d', short: '#4c9195', long: '#457ca3' },
+        blue:   { work: '#3b82f6', short: '#0ea5e9', long: '#6366f1' },
+        purple: { work: '#8b5cf6', short: '#a855f7', long: '#d946ef' },
+        orange: { work: '#f97316', short: '#ea580c', long: '#c2410c' },
+        pink:   { work: '#ec4899', short: '#db2777', long: '#be185d' },
+        slate:  { work: '#475569', short: '#334155', long: '#1e293b' }
+    };
+    let activeTheme = "teal";
+
+    // DOM Elements
+    const root = document.documentElement;
+    const timeDisplay = document.getElementById("timeDisplay");
+    const startBtn = document.getElementById("startBtn");
+    const finishBtn = document.getElementById("finishTaskBtn");
+    const taskSelect = document.getElementById("focusTaskSelect");
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function getVolume() { return document.getElementById("volumeSlider").value / 100; }
+    function playSound(type) {
+        if (type === "none") return;
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        const vol = getVolume();
+        if (vol <= 0.01) return;
+        const now = audioCtx.currentTime;
+        
+        const playTone = (freq, wavetype, start, dur) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = wavetype;
+            osc.frequency.setValueAtTime(freq, start);
+            gain.gain.setValueAtTime(vol, start);
+            gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+            osc.start(start);
+            osc.stop(start + dur);
+        };
+        if (type === "bell") { playTone(523.25, "sine", now, 1.5); } 
+        else if (type === "digital") { playTone(880, "square", now, 0.1); playTone(1760, "square", now + 0.1, 0.1); } 
+        else if (type === "melody") { playTone(523.25, "sine", now, 0.3); playTone(659.25, "sine", now + 0.2, 0.3); playTone(783.99, "sine", now + 0.4, 0.3); playTone(1046.5, "sine", now + 0.6, 0.6); }
+    }
+
+    function startTicking() {
+        if (tickInterval) clearInterval(tickInterval);
+        if (!document.getElementById("tickToggle").checked) return;
+        tickInterval = setInterval(() => {
+            const vol = getVolume() * 0.2;
+            if (vol > 0.01) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = "square";
+                osc.frequency.value = 1000;
+                gain.gain.setValueAtTime(vol * 0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.03);
+            }
+        }, 1000);
+    }
+    function stopTicking() { if (tickInterval) clearInterval(tickInterval); tickInterval = null; }
+
+    function updateTimeDisplay() {
+        if (remainingSeconds < 0) remainingSeconds = 0;
+        const m = Math.floor(remainingSeconds / 60);
+        const s = remainingSeconds % 60;
+        timeDisplay.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        document.title = `${timeDisplay.textContent} - Focus Hub`;
+    }
+
+    window.switchMode = function(mode) {
+        stopTimer();
+        currentMode = mode;
+        remainingSeconds = durations[mode] * 60;
+        // NEW: reset session total when switching modes
+        sessionTotalSeconds = remainingSeconds;
+
+        document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+        document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
+        applyTheme(activeTheme);
+        updateTimeDisplay();
+        if(currentMode !== 'work') { finishBtn.style.display = 'none'; } 
+        else if (taskSelect.value) { finishBtn.style.display = 'flex'; }
+    }
+
+    document.getElementById("btnWork").onclick = () => switchMode("work");
+    document.getElementById("btnShort").onclick = () => switchMode("short");
+    document.getElementById("btnLong").onclick = () => switchMode("long");
+    
+    document.getElementById("startBtn").onclick = () => {
+        if (timerInterval) { stopTimer(); } 
+        else {
+            if (currentMode === "work" && !taskSelect.value) { alert("Please select a task to start focusing."); return; }
+            startTimer();
+        }
+    };
+
+    function startTimer() {
+        startBtn.textContent = "PAUSE";
+        startBtn.style.transform = "translateY(4px)";
+        startBtn.style.boxShadow = "none";
+        if (currentMode === "work") finishBtn.style.display = 'flex';
+        if (document.getElementById("tickToggle").checked) startTicking();
+        timerInterval = setInterval(() => {
+            remainingSeconds--;
+            updateTimeDisplay();
+            if (remainingSeconds <= 0) completeTimer();
+        }, 1000);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        stopTicking();
+        startBtn.textContent = "START";
+        startBtn.style.transform = "translateY(0)";
+        startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
+        finishBtn.style.display = 'none';
+    }
+
+    finishBtn.onclick = async () => {
+        if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
+        stopTimer();
+        playSound('digital');
+        const totalSeconds = sessionTotalSeconds || durations.work * 60;
+        const elapsedSeconds = totalSeconds - remainingSeconds;
+        const minsSpent = Math.max(1, Math.ceil(elapsedSeconds / 60));
+        const tid = taskSelect.value;
+        if (tid) {
+            await updateStats(minsSpent);
+            await markTaskAsDone(tid, minsSpent);
+            await logDailyTaskWork(tid, minsSpent);
+        }
+        // Reset to full focus duration for next session
+        remainingSeconds = durations.work * 60;
+        sessionTotalSeconds = remainingSeconds;
+        updateTimeDisplay();
+        await loadBoardTasksIntoDropdown();
+        showBreakDecisionModal();
+    };
+
+    async function completeTimer() {
+        stopTimer();
+        if (currentMode === "work") {
+            // NEW: compute actual elapsed time from this session
+            const total = sessionTotalSeconds || (durations.work * 60);
+            const elapsedSeconds = total - remainingSeconds;
+            const mins = Math.max(1, Math.round(elapsedSeconds / 60));
+
+            pomodoroCycleCount++;
+            playSound(document.getElementById("workSoundType").value);
+            await updateStats(mins);
+            const tid = taskSelect.value;
+            if (tid) {
+                await updateTaskStatsOnly(tid, mins);
+                await logDailyTaskWork(tid, mins);
+            }
+            showBreakDecisionModal();
+        } else {
+            playSound(document.getElementById("breakSoundType").value);
+            await updateBreakStats();
+            if (document.getElementById("autoSwitchToggle").checked) { switchMode("work"); } else { switchMode("work"); }
+        }
+    }
+
+    // --- DAILY LOGIC ---
+    async function logDailyTaskWork(tid, mins) {
+        try {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const logRef = doc(db, "boards", boardId, "daily_logs", todayStr);
+            await setDoc(logRef, { [tid]: increment(mins) }, { merge: true });
+        } catch(e) { console.error(e); }
+    }
+
+    window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); }
+    window.handleBreakDecision = function(decision) {
+        document.getElementById("breakModal").classList.remove("open");
+        if (decision === 'take') {
+            currentStreak++; updateStreakUI();
+            let nextMode = "short";
+            if (pomodoroCycleCount >= longBreakInterval) { nextMode = "long"; pomodoroCycleCount = 0; }
+            switchMode(nextMode); startTimer(); 
+        } else if (decision === 'skip') {
+            if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
+            currentStreak = 0; updateStreakUI();
+            switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer();
+        } else if (decision === 'remind') {
+            // NEW: treat this as a fresh 5-minute focus session
+            currentMode = 'work';
+            remainingSeconds = 5 * 60;
+            sessionTotalSeconds = 5 * 60;
+            updateTimeDisplay();
+            startTimer();
+        }
+    }
+
+    function updateStreakUI() {
+        document.getElementById("streakCount").textContent = currentStreak;
+        if (currentStreak > 0) document.getElementById("streakBadge").style.opacity = 1;
+        if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak });
+    }
+
+    // --- RESTORE TASK LOGIC ---
+    const restoreModal = document.getElementById("restoreModal");
+    document.getElementById("openRestoreBtn").onclick = () => {
+        restoreModal.classList.add("open");
+        loadCompletedTasks();
+    };
+    document.getElementById("closeRestoreBtn").onclick = () => restoreModal.classList.remove("open");
+
+    function loadCompletedTasks() {
+        const list = document.getElementById("restoreList");
+        list.innerHTML = "";
+        const doneTasks = cachedTasks.filter(t => (t.status || "").toLowerCase() === "done");
+        
+        if (doneTasks.length === 0) {
+            list.innerHTML = '<li class="ranking-item" style="text-align:center; color:#666;">No completed tasks found.</li>';
+            return;
+        }
+
+        doneTasks.forEach(t => {
+            const li = document.createElement("li");
+            li.className = "ranking-item";
+            li.innerHTML = `
+                <span class="rank-name" style="text-decoration: line-through; color:#888;">${t.name}</span>
+                <button class="restore-list-btn" onclick="restoreTask('${t.id}')">Restore</button>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    window.restoreTask = async function(tid) {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                const tasks = bSnap.data().tasks;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].status = "Todo";
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+            await loadBoardTasksIntoDropdown();
+            loadCompletedTasks();
+            alert("Task Restored! It's back in your dropdown.");
+        } catch(e) {
+            console.error("Restore failed:", e);
+            alert("Failed to restore task.");
+        }
+    }
+
+    // --- REPORTING SYSTEM ---
+    window.switchReportTab = function(tabName) {
+        document.getElementById('viewActivity').style.display = tabName === 'activity' ? 'block' : 'none';
+        document.getElementById('viewTask').style.display = tabName === 'task' ? 'block' : 'none';
+        document.getElementById('tabActivity').classList.toggle('active', tabName === 'activity');
+        document.getElementById('tabTask').classList.toggle('active', tabName === 'task');
+        if(tabName === 'activity') updateReportPeriod('daily', document.querySelector('#viewActivity .time-filter-btn')); 
+        if(tabName === 'task') generateTaskChart(); 
+    }
+
+    window.updateReportPeriod = function(period, btnEl) {
+        document.querySelectorAll('#viewActivity .time-filter-btn').forEach(b => b.classList.remove('active'));
+        if (btnEl) btnEl.classList.add('active');
+
+        let labels = [], data = [];
+        
+        const todayMins = parseInt(document.getElementById("repMinutes").textContent) || 0;
+        const todayPomo = parseInt(document.getElementById("repPomos").textContent) || 0;
+        const todayBreak = parseInt(document.getElementById("repBreaks").textContent) || 0;
+
+        if (period === 'daily') {
+            labels = ["Pomodoros", "Mins", "Breaks"];
+            data = [todayPomo, todayMins, todayBreak];
+            renderActivityChart(labels, data, 'bar', 'Today Activity');
+        } else if (period === 'weekly') {
+            labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            data = [0, 0, 0, 0, 0, 0, 0];
+            const dayIndex = (new Date().getDay() + 6) % 7; 
+            data[dayIndex] = todayMins;
+            renderActivityChart(labels, data, 'bar', 'Weekly Activity (Mins)');
+        } else {
+            labels = ["Week 1", "Week 2", "Week 3", "Week 4"];
+            data = [0, 0, 0, 0];
+            data[0] = todayMins; 
+            renderActivityChart(labels, data, 'line', 'Monthly Activity (Mins)');
+        }
+    }
+
+    function renderActivityChart(labels, data, type, label) {
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        if (activityChartInstance) activityChartInstance.destroy();
+        activityChartInstance = new Chart(ctx, {
+            type: type,
+            data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: '#4ade80', borderColor: '#4ade80', tension: 0.1, borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' } }, x: { grid: { display: false }, ticks: { color: '#94a3b8' } } } }
+        });
+    }
+
+    // --- TASK CHART (NO BUTTONS, TOTAL ONLY) ---
+    function generateTaskChart() {
+        const labels = [];
+        const data = [];
+        const colors = ['#f87171', '#60a5fa', '#34d399', '#a78bfa', '#fbbf24', '#f472b6'];
+        const rankList = document.getElementById("rankingList");
+        rankList.innerHTML = "";
+        
+        const sorted = [...cachedTasks].sort((a,b) => (b.focus_minutes || 0) - (a.focus_minutes || 0));
+
+        sorted.forEach((t) => {
+            if((t.focus_minutes || 0) > 0) {
+                labels.push(t.name);
+                data.push(t.focus_minutes); 
+                
+                const li = document.createElement("li");
+                li.className = "ranking-item";
+                const statusIcon = t.status === 'Done' ? '✅ ' : '';
+                li.innerHTML = `
+                    <span class="rank-name" title="${t.name}">${statusIcon}${t.name}</span>
+                    <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${Math.min(100, t.focus_minutes)}%"></div></div>
+                    <span class="rank-time">${t.focus_minutes}m</span>
+                `;
+                rankList.appendChild(li);
+            }
+        });
+
+        if (data.length === 0) rankList.innerHTML = '<li class="ranking-item" style="justify-content:center; color:#666;">No tasks focused yet.</li>';
+
+        const ctx = document.getElementById('taskChart').getContext('2d');
+        if (taskChartInstance) taskChartInstance.destroy();
+
+        taskChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: 'white', boxWidth: 10, font: {size: 10} } } } }
+        });
+    }
+
+    async function init() {
+        updateTimeDisplay();
+        await loadUserStats();
+        await loadBoardTasksIntoDropdown();
+        applyTheme(activeTheme);
+        document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        
+        ['work', 'short', 'long'].forEach(mode => {
+            document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
+                durations[mode] = parseInt(e.target.value) || 1;
+                if(currentMode === mode && !timerInterval) {
+                    remainingSeconds = durations[mode] * 60;
+                    // NEW: keep session total in sync with changed duration
+                    sessionTotalSeconds = remainingSeconds;
+                    updateTimeDisplay();
+                }
+            });
+        });
+        document.getElementById("intervalSlider").addEventListener('input', (e) => {
+             longBreakInterval = parseInt(e.target.value); document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        });
+        document.querySelectorAll(".test-btn").forEach(btn => {
+            btn.onclick = () => playSound(document.getElementById(btn.dataset.target).value);
+        });
+
+        // Subscribe to Firestore commands from bot
+        subscribeToBotCommandsFirestore();
+    }
+
+    async function loadUserStats() {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            const ref = doc(db, "users", userId);
+            let snap = await getDoc(ref);
+            if (!snap.exists()) { await setDoc(ref, { today_date: today }); snap = await getDoc(ref); }
+            let data = snap.data();
+            if (data.today_date !== today) {
+                await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
+                data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
+            }
+            userStatsDocCache = ref;
+            currentStreak = data.current_streak || 0;
+            updateStreakUI();
+            document.getElementById("repPomos").textContent = data.today_pomodoros || 0;
+            document.getElementById("repMinutes").textContent = data.today_focus_minutes || 0;
+            document.getElementById("repBreaks").textContent = data.breaks_today || 0;
+        } catch (err) { console.error(err); }
+    }
+
+    async function loadBoardTasksIntoDropdown() {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            const snap = await getDoc(boardRef);
+            if (!snap.exists()) return;
+            const bData = snap.data();
+            const tasks = bData.tasks || [];
+            cachedTasks = tasks;
+            const projects = bData.projects || [];
+            const projectById = {};
+            projects.forEach(p => projectById[p.id] = p);
+            
+            taskSelect.innerHTML = '<option value="">(Select a Task to Start)</option>';
+            const openTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
+            
+            openTasks.forEach(t => {
+                const project = projectById[t.projectId];
+                if (!project) return;
+                const opt = document.createElement("option");
+                opt.value = t.id;
+                const projName = project.name || "Unknown";
+                const dispName = t.name.length > 25 ? t.name.substring(0,25) + "..." : t.name;
+                opt.textContent = `${dispName} • ${projName}`;
+                taskSelect.appendChild(opt);
+            });
+        } catch (err) { console.error(err); }
+    }
+    
+    async function updateStats(mins) {
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, { today_pomodoros: increment(1), today_focus_minutes: increment(mins), current_streak: currentStreak });
+        const minsEl = document.getElementById("repMinutes"); const pomoEl = document.getElementById("repPomos");
+        minsEl.textContent = parseInt(minsEl.textContent) + mins; pomoEl.textContent = parseInt(pomoEl.textContent) + 1;
+    }
+
+    async function updateBreakStats() {
+        if (!userStatsDocCache) return;
+        await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
+        const brkEl = document.getElementById("repBreaks"); brkEl.textContent = parseInt(brkEl.textContent) + 1;
+    }
+
+    async function updateTaskStatsOnly(tid, mins) {
+        const task = cachedTasks.find(t => t.id === tid);
+        if(task) { task.focus_minutes = (task.focus_minutes || 0) + mins; task.pomodoro_count = (task.pomodoro_count || 0) + 1; }
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                const tasks = bSnap.data().tasks;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
+                    tasks[idx].pomodoro_count = (tasks[idx].pomodoro_count || 0) + 1;
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+        } catch(e) { console.error(e); }
+    }
+    
+    async function markTaskAsDone(tid, mins) {
+        try {
+            const boardRef = doc(db, "boards", boardId);
+            await runTransaction(db, async tx => {
+                const bSnap = await tx.get(boardRef);
+                if(!bSnap.exists()) return;
+                const tasks = bSnap.data().tasks;
+                const idx = tasks.findIndex(t => t.id === tid);
+                if(idx > -1) {
+                    tasks[idx].focus_minutes = (tasks[idx].focus_minutes || 0) + mins;
+                    tasks[idx].status = "Done";
+                    tasks[idx].completed_at = new Date().toISOString();
+                    tx.update(boardRef, { tasks: tasks });
+                }
+            });
+        } catch(e) { 
+            console.error(e); 
+            alert("Failed to mark as done. Please check your connection.");
+        }
+    }
+
+    function applyTheme(name) {
+        activeTheme = name;
+        const t = themes[name];
+        root.style.setProperty("--bg-work",  t.work); root.style.setProperty("--bg-short", t.short); root.style.setProperty("--bg-long",  t.long);
+        let color = "var(--bg-work)";
+        if (currentMode === "short") color = "var(--bg-short)"; if (currentMode === "long")  color = "var(--bg-long)";
+        root.style.setProperty("--bg-current", color);
+        document.querySelectorAll(".theme-swatch").forEach(el => el.classList.toggle("selected", el.dataset.theme === name));
+    }
+    
+    const settingsModal = document.getElementById("settingsModal");
+    const reportModal = document.getElementById("reportModal");
+    document.getElementById("openSettingsBtn").onclick = () => settingsModal.classList.add("open");
+    document.getElementById("closeSettingsBtn").onclick = () => settingsModal.classList.remove("open");
+    document.getElementById("openReportBtn").onclick = () => { reportModal.classList.add("open"); switchReportTab('activity'); };
+    document.getElementById("closeReportBtn").onclick = () => reportModal.classList.remove("open");
+    document.querySelectorAll(".theme-swatch").forEach(s => s.onclick = () => applyTheme(s.dataset.theme));
+
+    // -----------------------------
+    // Firestore command listener
+    // -----------------------------
+    let lastCommandId = null;
+
+    function unwrapFirestoreVal(v) {
+        // If using REST/structured fields the value might be { stringValue: "..." }
+        if (!v) return null;
+        if (typeof v === "object" && v.stringValue !== undefined) return v.stringValue;
+        return v;
+    }
+
+    function subscribeToBotCommandsFirestore() {
+        try {
+            console.log("[DEBUG] subscribeToBotCommandsFirestore for user:", userId);
+            const sessionDocRef = doc(db, "active_sessions", userId);
+            onSnapshot(sessionDocRef, async (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+                if (!data) return;
+                console.log("[DEBUG] active_sessions snapshot:", data);
+
+                // data may have fields as { stringValue: ... } if written via REST
+                const rawCommand = data.command || data.command;
+                const rawCommandId = data.commandId || data.commandId;
+                const command = unwrapFirestoreVal(rawCommand);
+                const commandId = unwrapFirestoreVal(rawCommandId);
+
+                if (!commandId || commandId === lastCommandId) return;
+                lastCommandId = commandId;
+
+                console.log("[DEBUG] Received command:", command, "id:", commandId);
+
+                if (command === "TAKE_BREAK") {
+                    console.log("[DEBUG] command -> TAKE_BREAK");
+                    handleBreakDecision('take');
+                }
+                else if (command === "SKIP_BREAK") {
+                    console.log("[DEBUG] command -> SKIP_BREAK");
+                    handleBreakDecision('skip');
+                }
+                else if (command === "FINISH_EARLY") {
+                    console.log("[DEBUG] command -> FINISH_EARLY");
+                    if (timerInterval) {
+                        // Emulate the finish flow without user confirm
+                        stopTimer();
+                        playSound('digital');
+                        const totalSeconds   = sessionTotalSeconds || durations.work * 60;
+                        const elapsedSeconds = totalSeconds - remainingSeconds;
+                        const minsSpent      = Math.max(1, Math.ceil(elapsedSeconds / 60));
+                        const tid            = taskSelect.value;
+                        console.log("[DEBUG] FINISH_EARLY processing:", { elapsedSeconds, minsSpent, tid });
+
+                        if (tid) {
+                            await updateStats(minsSpent);
+                            await markTaskAsDone(tid, minsSpent);
+                            await logDailyTaskWork(tid, minsSpent);
+                        }
+                        // Reset timer for next session
+                        remainingSeconds    = durations.work * 60;
+                        sessionTotalSeconds = remainingSeconds;
+                        updateTimeDisplay();
+                        await loadBoardTasksIntoDropdown();
+                        showBreakDecisionModal();
+                    } else {
+                        // If no timer running, still mark as done quickly
+                        const tid = taskSelect.value;
+                        if (tid) {
+                            await markTaskAsDone(tid, 0);
+                        }
+                    }
+                } else {
+                    console.log("[DEBUG] Unknown command:", command);
+                }
+            });
+        } catch (err) {
+            console.error("[ERROR] subscribeToBotCommandsFirestore:", err);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
