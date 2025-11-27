@@ -909,7 +909,7 @@
         ['work', 'short', 'long'].forEach(mode => {
             const el = document.getElementById(`${mode}Duration`);
             if (el) {
-                el.addEventListener('change', (e) => { // Use 'change' instead of 'input' for DB writes
+                el.addEventListener('input', (e) => { // Use 'input' instead of 'change' for immediate DB writes
                     durations[mode] = parseInt(e.target.value) || 1;
                     saveUserPreferences(); // Save to DB
                     if(currentMode === mode && !timerInterval) {
