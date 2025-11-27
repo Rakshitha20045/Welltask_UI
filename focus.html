@@ -502,6 +502,28 @@
         } catch(e) { console.error("Error clearing session state:", e); }
     }
     
+    // NEW: Save User Preferences to Firestore
+    async function saveUserPreferences() {
+        if (!userStatsDocCache) return;
+        const prefs = {
+            focus: parseInt(document.getElementById('workDuration').value) || 25,
+            short: parseInt(document.getElementById('shortDuration').value) || 5,
+            long: parseInt(document.getElementById('longDuration').value) || 15,
+            interval: parseInt(document.getElementById('intervalSlider').value) || 4
+        };
+        
+        // Update local state
+        durations.work = prefs.focus;
+        durations.short = prefs.short;
+        durations.long = prefs.long;
+        longBreakInterval = prefs.interval;
+        
+        try {
+            await setDoc(userStatsDocCache, { prefs: prefs }, { merge: true });
+            console.log("[DEBUG] User preferences saved:", prefs);
+        } catch(e) { console.error("Error saving preferences:", e); }
+    }
+
     async function checkActiveSession() {
         try {
             console.log("[DEBUG] Checking for active session to resume...");
@@ -573,6 +595,10 @@
                 const taskName = taskSelect.options[taskSelect.selectedIndex].text;
                 const tid = taskSelect.value;
                 notifyBot("start", taskName, Math.round(sessionTotalSeconds / 60), tid).then(r => console.log("[DEBUG] notifyBot start result:", r));
+            } else {
+                // FIXED: NOTIFY BOT FOR BREAKS AS WELL
+                const breakName = currentMode === "short" ? "Short Break" : "Long Break";
+                notifyBot("start_break", breakName, Math.round(sessionTotalSeconds / 60), null);
             }
         } else {
             if (!sessionStart) {
@@ -642,7 +668,6 @@
         stopTimer();
         clearSessionState(); 
         if (currentMode === "work") {
-            // FOCUS JUST ENDED
             const total = sessionTotalSeconds || (durations.work * 60);
             const elapsedSeconds = sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : (total - remainingSeconds);
             const mins = Math.max(1, Math.round(elapsedSeconds / 60));
@@ -688,14 +713,9 @@
     }
 
     window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); console.log("[DEBUG] showBreakDecisionModal"); }
-    
-    // -------------------------------------------------------------
-    // LOGIC UPDATE: Handle Break Decision (Short vs Long)
-    // -------------------------------------------------------------
     window.handleBreakDecision = function(decision) {
         document.getElementById("breakModal").classList.remove("open");
         console.log("[DEBUG] handleBreakDecision:", decision);
-        
         if (decision === 'take') {
             currentStreak++; updateStreakUI();
             
@@ -703,7 +723,6 @@
             let nextMode = "short";
             console.log(`[DEBUG] Cycle Logic: Count=${pomodoroCycleCount}, Interval=${longBreakInterval}`);
             
-            // If cycle count matches interval (e.g. 2 % 2 == 0), trigger Long Break
             if (pomodoroCycleCount % longBreakInterval === 0) {
                 console.log("[DEBUG] Triggering LONG BREAK");
                 nextMode = "long";
@@ -715,8 +734,7 @@
             switchMode(nextMode); 
             sessionStart = Date.now();
             sessionTotalSeconds = durations[nextMode] * 60;
-            startTimer(false); // Start Break Timer
-            
+            startTimer(false);
         } else if (decision === 'skip') {
             if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
             currentStreak = 0; updateStreakUI();
@@ -891,8 +909,9 @@
         ['work', 'short', 'long'].forEach(mode => {
             const el = document.getElementById(`${mode}Duration`);
             if (el) {
-                el.addEventListener('input', (e) => {
+                el.addEventListener('change', (e) => { // Use 'change' instead of 'input' for DB writes
                     durations[mode] = parseInt(e.target.value) || 1;
+                    saveUserPreferences(); // Save to DB
                     if(currentMode === mode && !timerInterval) {
                         remainingSeconds = durations[mode] * 60;
                         sessionTotalSeconds = remainingSeconds;
@@ -901,9 +920,16 @@
                 });
             }
         });
-        document.getElementById("intervalSlider").addEventListener('input', (e) => {
-             longBreakInterval = parseInt(e.target.value); document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+        document.getElementById("intervalSlider").addEventListener('change', (e) => {
+             longBreakInterval = parseInt(e.target.value); 
+             document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
+             saveUserPreferences(); // Save to DB
         });
+        // Update display on slide (visual only)
+        document.getElementById("intervalSlider").addEventListener('input', (e) => {
+             document.getElementById("intervalDisplay").textContent = `${e.target.value} Pomodoros`;
+        });
+
         document.querySelectorAll(".test-btn").forEach(btn => {
             btn.onclick = () => playSound(document.getElementById(btn.dataset.target).value);
         });
@@ -937,6 +963,30 @@
             let snap = await getDoc(ref);
             if (!snap.exists()) { await setDoc(ref, { today_date: today }); snap = await getDoc(ref); }
             let data = snap.data();
+            
+            // LOAD PREFERENCES
+            if (data.prefs) {
+                durations.work = data.prefs.focus || 25;
+                durations.short = data.prefs.short || 5;
+                durations.long = data.prefs.long || 15;
+                longBreakInterval = data.prefs.interval || 4;
+                
+                // Update Inputs
+                if(document.getElementById('workDuration')) document.getElementById('workDuration').value = durations.work;
+                if(document.getElementById('shortDuration')) document.getElementById('shortDuration').value = durations.short;
+                if(document.getElementById('longDuration')) document.getElementById('longDuration').value = durations.long;
+                if(document.getElementById('intervalSlider')) document.getElementById('intervalSlider').value = longBreakInterval;
+                if(document.getElementById('intervalDisplay')) document.getElementById('intervalDisplay').textContent = `${longBreakInterval} Pomodoros`;
+                
+                // Refresh UI if idle
+                if(!timerInterval && !sessionStart) {
+                    remainingSeconds = durations[currentMode] * 60;
+                    sessionTotalSeconds = remainingSeconds;
+                    updateTimeDisplay();
+                }
+                console.log("[DEBUG] Loaded preferences:", data.prefs);
+            }
+
             if (data.today_date !== today) {
                 await updateDoc(ref, { today_date: today, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 });
                 data = { ...data, today_pomodoros: 0, today_focus_minutes: 0, breaks_today: 0 };
