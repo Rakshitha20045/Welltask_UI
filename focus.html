@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     <style>
         :root {
             --bg-work: #2a9d8f;
@@ -286,7 +285,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
     // Firebase config
     const firebaseConfig = {
@@ -324,6 +323,9 @@
     let activityChartInstance = null;
     let taskChartInstance = null;
     let cachedTasks = [];
+
+    // NEW: authoritative session start timestamp (ms)
+    let sessionStart = null; 
 
     const themes = {
         teal:   { work: '#2a9d8f', short: '#457b9d', long: '#6d597a' },
@@ -390,7 +392,20 @@
     }
     function stopTicking() { if (tickInterval) clearInterval(tickInterval); tickInterval = null; }
 
+    // --- NEW: compute remaining seconds from authoritative sessionStart + sessionTotalSeconds
+    function computeRemainingSeconds() {
+        if (!sessionStart || !sessionTotalSeconds) {
+            // fallback (shouldn't usually happen)
+            return remainingSeconds;
+        }
+        const elapsedMs = Date.now() - sessionStart;
+        const left = Math.round(sessionTotalSeconds - (elapsedMs / 1000));
+        return Math.max(0, left);
+    }
+
+    // REPLACED updateTimeDisplay uses computeRemainingSeconds
     function updateTimeDisplay() {
+        remainingSeconds = computeRemainingSeconds();
         if (remainingSeconds < 0) remainingSeconds = 0;
         const m = Math.floor(remainingSeconds / 60);
         const s = remainingSeconds % 60;
@@ -399,12 +414,14 @@
     }
 
     window.switchMode = function(mode) {
+        console.log("[DEBUG] switchMode:", mode);
         stopTimer();
-        // Clear active session in DB if user switches modes manually
         clearSessionState();
         currentMode = mode;
-        remainingSeconds = durations[mode] * 60;
-        sessionTotalSeconds = remainingSeconds;
+        sessionTotalSeconds = durations[mode] * 60;
+        // reset sessionStart because mode changed
+        sessionStart = null;
+        remainingSeconds = sessionTotalSeconds;
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
         document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
         applyTheme(activeTheme);
@@ -421,7 +438,6 @@
     // UPDATED notifyBot: Uses internal Vercel Proxy to fix CORS
     // --------------------------------------------------------------------------------
     async function notifyBot(type, taskName, duration, taskId) {
-        // POINT TO YOUR VERCEL API ROUTE (The Proxy)
         const webhookUrl = "/api/cliqWebhook"; 
 
         const data = {
@@ -434,11 +450,9 @@
             ts: new Date().toISOString()
         };
         
-        console.log(`[DEBUG] notifyBot: Preparing to send '${type}' signal via Proxy...`);
-        console.log("[DEBUG] Payload:", JSON.stringify(data, null, 2));
+        console.log(`[DEBUG] notifyBot: Preparing to send '${type}' signal via Proxy...`, data);
 
         try {
-            // Send request to your OWN backend, not Zoho directly
             const res = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -446,8 +460,7 @@
             });
             
             const resText = await res.text();
-            console.log(`[DEBUG] Proxy HTTP Status: ${res.status}`);
-            console.log("[DEBUG] Proxy Raw Response:", resText);
+            console.log(`[DEBUG] Proxy HTTP Status: ${res.status}`, resText);
 
             if (res.ok) {
                 console.log("[SUCCESS] Bot notified successfully via proxy.");
@@ -465,21 +478,28 @@
     // --- PERSISTENCE HELPER FUNCTIONS ---
     async function saveSessionState() {
         try {
+            const now = Date.now();
+            // ensure we have sessionStart set (authoritative)
+            if (!sessionStart) sessionStart = now;
             await setDoc(doc(db, "active_sessions", userId), {
                 status: 'running',
-                startTime: Date.now(),
-                duration: durations[currentMode],
+                startTime: sessionStart,           // store ms timestamp (authoritative)
+                duration: sessionTotalSeconds / 60 || durations[currentMode], // minutes
                 mode: currentMode,
                 taskId: taskSelect.value || "",
-                lastUpdated: new Date().toISOString()
+                lastUpdated: new Date().toISOString(),
+                // add a commandId reset to avoid accidental replay
+                command: null,
+                commandId: null
             }, { merge: true });
-            console.log("[DEBUG] Session state saved to Firestore.");
+            console.log("[DEBUG] Session state saved to Firestore.", { sessionStart, sessionTotalSeconds, mode: currentMode, taskId: taskSelect.value });
         } catch(e) { console.error("Error saving session state:", e); }
     }
 
     async function clearSessionState() {
         try {
-            await updateDoc(doc(db, "active_sessions", userId), { status: 'idle' });
+            // mark idle
+            await updateDoc(doc(db, "active_sessions", userId), { status: 'idle', command: null, commandId: null });
             console.log("[DEBUG] Session state cleared in Firestore.");
         } catch(e) { console.error("Error clearing session state:", e); }
     }
@@ -491,37 +511,33 @@
             const snap = await getDoc(docRef);
             if (snap.exists()) {
                 const data = snap.data();
+                console.log("[DEBUG] active_sessions doc:", data);
                 if (data.status === 'running' && data.startTime) {
                     const now = Date.now();
-                    const elapsedSec = (now - data.startTime) / 1000;
-                    const totalSec = (data.duration || 25) * 60;
-                    const left = totalSec - elapsedSec;
+                    // data.startTime may be saved as ms number or string; coerce
+                    const startMs = (typeof data.startTime === 'number') ? data.startTime : parseInt(data.startTime);
+                    const totalSec = (data.duration || durations.work) * 60;
+                    const elapsedSec = (now - startMs) / 1000;
+                    const left = Math.round(totalSec - elapsedSec);
+
+                    console.log("[DEBUG] resume calc", { startMs, totalSec, elapsedSec, left });
 
                     if (left > 0) {
-                        console.log("[DEBUG] Resuming active session...", left);
-                        
-                        // 1. Restore Mode & UI
-                        if (data.mode) {
-                            currentMode = data.mode;
-                            document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
-                            const btnId = currentMode === 'work' ? 'btnWork' : currentMode === 'short' ? 'btnShort' : 'btnLong';
-                            if(document.getElementById(btnId)) document.getElementById(btnId).classList.add("active");
-                            applyTheme(themes[activeTheme] ? activeTheme : 'teal'); 
-                            if(currentMode === 'work') finishBtn.style.display = 'flex';
-                        }
-                        
-                        // 2. Restore Task Selection
-                        if (data.taskId) {
-                            taskSelect.value = data.taskId; 
-                        }
-
-                        // 3. Start Timer (Resume Mode)
-                        remainingSeconds = left;
+                        // Restore state: sessionStart + total seconds
+                        sessionStart = startMs;
                         sessionTotalSeconds = totalSec;
-                        startTimer(true); // Pass true to indicate we are RESUMING
+                        currentMode = data.mode || currentMode;
+                        document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+                        const btnId = currentMode === 'work' ? 'btnWork' : currentMode === 'short' ? 'btnShort' : 'btnLong';
+                        if(document.getElementById(btnId)) document.getElementById(btnId).classList.add("active");
+                        applyTheme(activeTheme);
+                        remainingSeconds = left;
+                        if(currentMode === 'work') finishBtn.style.display = 'flex';
+                        console.log("[DEBUG] Resuming active session...", { remainingSeconds, sessionTotalSeconds, sessionStart });
+                        // start timer in resume-mode
+                        startTimer(true);
                     } else {
-                        console.log("[DEBUG] Session expired while away.");
-                        // Clean up expired session
+                        console.log("[DEBUG] Found session but it already expired while away. Cleaning up.");
                         clearSessionState();
                         remainingSeconds = 0;
                         updateTimeDisplay();
@@ -532,74 +548,106 @@
     }
 
     document.getElementById("startBtn").onclick = () => {
-        if (timerInterval) { stopTimer(); clearSessionState(); } // User clicked PAUSE
-        else {
+        if (timerInterval) { 
+            console.log("[DEBUG] Start button clicked while running => Pause requested.");
+            stopTimer(); 
+            clearSessionState(); 
+        } else {
             if (currentMode === "work" && !taskSelect.value) { alert("Please select a task to start focusing."); return; }
+            console.log("[DEBUG] Start button clicked => Start new timer.");
+            // new start: set sessionTotalSeconds from durations
+            sessionTotalSeconds = durations[currentMode] * 60;
+            // set remainingSeconds in case
+            remainingSeconds = sessionTotalSeconds;
+            // set sessionStart now; saveSessionState will persist this
+            sessionStart = Date.now();
             startTimer(false); // New Start
         }
     };
 
     function startTimer(isResuming = false) {
+        console.log("[DEBUG] startTimer called. isResuming:", isResuming, { sessionStart, sessionTotalSeconds });
         startBtn.textContent = "PAUSE";
         startBtn.style.transform = "translateY(4px)";
         startBtn.style.boxShadow = "none";
-        
-        // Only notify bot & save state if this is a NEW start (not a resume/refresh)
+
+        // If not resuming, ensure authoritative sessionStart is persisted
         if (!isResuming) {
-            saveSessionState();
+            // set authoritative start time if not already set
+            if (!sessionStart) sessionStart = Date.now();
+            // ensure sessionTotalSeconds is set
+            sessionTotalSeconds = sessionTotalSeconds || durations[currentMode] * 60;
+            saveSessionState(); // persists sessionStart & duration & mode & task
             if (currentMode === "work") {
                 finishBtn.style.display = 'flex';
                 const taskName = taskSelect.options[taskSelect.selectedIndex].text;
                 const tid = taskSelect.value;
-                notifyBot("start", taskName, durations.work, tid).then(r => console.log("[DEBUG] notifyBot start result:", r));
+                notifyBot("start", taskName, Math.round(sessionTotalSeconds / 60), tid).then(r => console.log("[DEBUG] notifyBot start result:", r));
             }
         } else {
-             // If resuming, just ensure Finish btn is shown if working
-             if (currentMode === "work") finishBtn.style.display = 'flex';
+            // resuming: sessionStart should already be present from checkActiveSession
+            if (!sessionStart) {
+                // fallback: compute sessionStart from now & remainingSeconds
+                sessionStart = Date.now() - ((sessionTotalSeconds - remainingSeconds) * 1000);
+                console.warn("[WARN] startTimer resuming but sessionStart was null; computed fallback sessionStart:", sessionStart);
+            }
+            if (currentMode === "work") finishBtn.style.display = 'flex';
         }
 
         if (document.getElementById("tickToggle") && document.getElementById("tickToggle").checked) startTicking();
         
-        // Clear any existing interval to prevent duplicates
         if (timerInterval) clearInterval(timerInterval);
         
+        // interval still runs every second but UI time is derived from sessionStart
         timerInterval = setInterval(() => {
-            remainingSeconds--;
             updateTimeDisplay();
-            if (remainingSeconds <= 0) completeTimer();
+            // if time passed while throttled, this will catch up and call complete
+            if (computeRemainingSeconds() <= 0) {
+                console.log("[DEBUG] Timer interval detected completion while running.");
+                clearInterval(timerInterval);
+                timerInterval = null;
+                completeTimer();
+            }
         }, 1000);
+
+        console.log("[DEBUG] Timer started. sessionStart:", sessionStart, "sessionTotalSeconds:", sessionTotalSeconds);
     }
 
     function stopTimer() {
-        clearInterval(timerInterval);
-        timerInterval = null;
+        console.log("[DEBUG] stopTimer called.");
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
         stopTicking();
         startBtn.textContent = "START";
         startBtn.style.transform = "translateY(0)";
         startBtn.style.boxShadow = "0 6px 0 rgb(235, 235, 235)";
         finishBtn.style.display = 'none';
+        // keep sessionStart/sessionTotalSeconds so user can resume if they want
     }
 
     finishBtn.onclick = async () => {
         if (!confirm("Are you sure you want to mark this task as DONE? It will be removed from the list.")) return;
+        console.log("[DEBUG] finishBtn clicked -> finishing early manually");
         stopTimer();
         clearSessionState(); // Clear persistence
         playSound('digital');
+
+        // compute elapsed using authoritative sessionStart if present
         const totalSeconds = sessionTotalSeconds || durations.work * 60;
-        const elapsedSeconds = totalSeconds - remainingSeconds;
+        const elapsedSeconds = sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : (totalSeconds - remainingSeconds);
         const minsSpent = Math.max(1, Math.ceil(elapsedSeconds / 60));
         const tid = taskSelect.value;
         const taskName = taskSelect.options[taskSelect.selectedIndex].text;
 
-        console.log("[DEBUG] finishBtn clicked:", { tid, minsSpent });
+        console.log("[DEBUG] finish early data:", { totalSeconds, elapsedSeconds, minsSpent, tid });
 
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
             await logDailyTaskWork(tid, minsSpent);
-            // Notify bot session ended early manually (pass taskId)
             notifyBot("end", taskName, minsSpent, tid).then(r => console.log("[DEBUG] notifyBot end (finish early) result:", r));
         }
+        // reset
+        sessionStart = null;
         remainingSeconds = durations.work * 60;
         sessionTotalSeconds = remainingSeconds;
         updateTimeDisplay();
@@ -608,11 +656,13 @@
     };
 
     async function completeTimer() {
+        console.log("[DEBUG] completeTimer called. currentMode:", currentMode);
         stopTimer();
         clearSessionState(); // Clear persistence
         if (currentMode === "work") {
+            // compute minutes spent based on authoritative sessionStart
             const total = sessionTotalSeconds || (durations.work * 60);
-            const elapsedSeconds = total - remainingSeconds;
+            const elapsedSeconds = sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : (total - remainingSeconds);
             const mins = Math.max(1, Math.round(elapsedSeconds / 60));
 
             pomodoroCycleCount++;
@@ -626,14 +676,15 @@
                 await logDailyTaskWork(tid, mins);
             }
             
-            // NOTIFY BOT ON END (pass taskId)
             notifyBot("end", taskName, mins, tid).then(r => console.log("[DEBUG] notifyBot end result:", r));
-            
+            // cleanup sessionStart
+            sessionStart = null;
+            // show modal then proceed with break decision handled by modal
             showBreakDecisionModal();
         } else {
             playSound(document.getElementById("breakSoundType") ? document.getElementById("breakSoundType").value : 'melody');
             await updateBreakStats();
-            if (document.getElementById("autoSwitchToggle").checked) { switchMode("work"); } else { switchMode("work"); }
+            switchMode("work");
         }
     }
 
@@ -643,6 +694,7 @@
             const todayStr = new Date().toISOString().slice(0, 10);
             const logRef = doc(db, "boards", boardId, "daily_logs", todayStr);
             await setDoc(logRef, { [tid]: increment(mins) }, { merge: true });
+            console.log("[DEBUG] logDailyTaskWork saved:", { tid, mins, todayStr });
         } catch(e) { console.error(e); }
     }
 
@@ -654,13 +706,23 @@
             currentStreak++; updateStreakUI();
             let nextMode = "short";
             if (pomodoroCycleCount >= longBreakInterval) { nextMode = "long"; pomodoroCycleCount = 0; }
-            switchMode(nextMode); startTimer(false); 
+            switchMode(nextMode); 
+            // startTimer as new start for break (auto)
+            sessionStart = Date.now();
+            sessionTotalSeconds = durations[nextMode] * 60;
+            startTimer(false);
         } else if (decision === 'skip') {
             if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
             currentStreak = 0; updateStreakUI();
-            switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer(false);
+            switchMode("work"); 
+            if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) {
+                sessionStart = Date.now();
+                sessionTotalSeconds = durations.work * 60;
+                startTimer(false);
+            }
         } else if (decision === 'remind') {
             currentMode = 'work';
+            sessionStart = Date.now();
             remainingSeconds = 5 * 60;
             sessionTotalSeconds = 5 * 60;
             updateTimeDisplay();
@@ -705,6 +767,7 @@
 
     window.restoreTask = async function(tid) {
         try {
+            console.log("[DEBUG] restoreTask called:", tid);
             const boardRef = doc(db, "boards", boardId);
             await runTransaction(db, async tx => {
                 const bSnap = await tx.get(boardRef);
@@ -719,6 +782,7 @@
             await loadBoardTasksIntoDropdown();
             loadCompletedTasks();
             alert("Task Restored! It's back in your dropdown.");
+            console.log("[DEBUG] restoreTask completed:", tid);
         } catch(e) {
             console.error("Restore failed:", e);
             alert("Failed to restore task.");
@@ -843,7 +907,30 @@
         
         // CHECK FOR ACTIVE SESSION TO RESUME
         await checkActiveSession();
-        
+
+        // VISIBILITY CHANGE HANDLING (helps when tab/iframe is throttled)
+        document.addEventListener('visibilitychange', () => {
+            console.log("[DEBUG] visibilitychange -> document.hidden:", document.hidden);
+            // recompute UI immediately when tab becomes visible
+            if (!document.hidden) {
+                updateTimeDisplay();
+                // if the timer expired while away, complete immediately
+                if (timerInterval && computeRemainingSeconds() <= 0) {
+                    console.log("[DEBUG] visibilitychange detected timer expired while hidden -> completing now.");
+                    clearInterval(timerInterval); timerInterval = null;
+                    completeTimer();
+                }
+            }
+        });
+
+        // Also update UI periodically (visual) even if throttled - computeRemainingSeconds will handle correctness
+        setInterval(() => {
+            if (!timerInterval && sessionStart) {
+                // not actively running locally but there is a known session on server - refresh UI
+                updateTimeDisplay();
+            }
+        }, 5000);
+
         console.log("[DEBUG] init completed");
     }
 
@@ -1020,7 +1107,7 @@
                         
                         playSound('digital');
                         const totalSeconds   = sessionTotalSeconds || durations.work * 60;
-                        const elapsedSeconds = totalSeconds - remainingSeconds;
+                        const elapsedSeconds = sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : (totalSeconds - remainingSeconds);
                         const minsSpent      = Math.max(1, Math.ceil(elapsedSeconds / 60));
                         const tid            = taskSelect.value;
                         console.log("[DEBUG] FINISH_EARLY processing:", { elapsedSeconds, minsSpent, tid });
@@ -1031,6 +1118,7 @@
                             await logDailyTaskWork(tid, minsSpent);
                         }
                         // Reset timer for next session
+                        sessionStart = null;
                         remainingSeconds    = durations.work * 60;
                         sessionTotalSeconds = remainingSeconds;
                         updateTimeDisplay();
