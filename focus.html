@@ -157,7 +157,7 @@
         </div>
         
         <div id="streakBadge" style="margin-top:20px; font-size:14px; color:#4ade80; font-weight:600; opacity:0; transition:opacity 0.5s;">
-            🔥 Streak: <span id="streakCount">0</span>
+            🔥 Streak: <span id="streakCount">0</span> | Cycle: <span id="cycleCount">0</span>
         </div>
     </div>
 
@@ -177,7 +177,7 @@
     <div class="modal-content" style="max-width:400px; text-align:center;">
         <h2 style="margin-top:0;">Session Complete! 🎉</h2>
         <p style="color:#cbd5e1; margin-bottom:20px;">Prioritize your wellness. What's next?</p>
-        <button class="break-option-btn" onclick="handleBreakDecision('take')"><div style="font-size:24px;">☕</div><div><strong>Take a Break</strong><small>Recommended. Increases Streak 🔥</small></div></button>
+        <button class="break-option-btn" onclick="handleBreakDecision('take')"><div style="font-size:24px;">☕</div><div><strong>Take a Break</strong><small>Automatically chooses Short/Long based on cycle.</small></div></button>
         <button class="break-option-btn" onclick="handleBreakDecision('skip')"><div style="font-size:24px;">⏭</div><div><strong>Skip Break</strong><small>Go back to work. Streak Resets.</small></div></button>
         <button class="break-option-btn" onclick="handleBreakDecision('remind')"><div style="font-size:24px;">⏰</div><div><strong>Remind Me Later</strong><small>Add 5 mins to current session.</small></div></button>
     </div>
@@ -488,7 +488,8 @@
                 taskId: taskSelect.value || "",
                 lastUpdated: new Date().toISOString(),
                 command: null,
-                commandId: null
+                commandId: null,
+                pomodoroCycleCount: pomodoroCycleCount // Save this to restore state accurately
             }, { merge: true });
             console.log("[DEBUG] Session state saved to Firestore.");
         } catch(e) { console.error("Error saving session state:", e); }
@@ -509,6 +510,11 @@
             if (snap.exists()) {
                 const data = snap.data();
                 console.log("[DEBUG] active_sessions doc:", data);
+                if(data.pomodoroCycleCount !== undefined) {
+                    pomodoroCycleCount = data.pomodoroCycleCount;
+                    document.getElementById("cycleCount").textContent = pomodoroCycleCount;
+                }
+                
                 if (data.status === 'running' && data.startTime) {
                     const now = Date.now();
                     const startMs = (typeof data.startTime === 'number') ? data.startTime : parseInt(data.startTime);
@@ -636,11 +642,14 @@
         stopTimer();
         clearSessionState(); 
         if (currentMode === "work") {
+            // FOCUS JUST ENDED
             const total = sessionTotalSeconds || (durations.work * 60);
             const elapsedSeconds = sessionStart ? Math.round((Date.now() - sessionStart) / 1000) : (total - remainingSeconds);
             const mins = Math.max(1, Math.round(elapsedSeconds / 60));
 
-            pomodoroCycleCount++;
+            pomodoroCycleCount++; // INCREMENT CYCLE
+            document.getElementById("cycleCount").textContent = pomodoroCycleCount;
+            
             playSound(document.getElementById("workSoundType") ? document.getElementById("workSoundType").value : 'digital');
             await updateStats(mins);
             const tid = taskSelect.value;
@@ -655,9 +664,16 @@
             sessionStart = null;
             showBreakDecisionModal();
         } else {
+            // BREAK JUST ENDED -> AUTO START WORK
+            console.log("[DEBUG] Break ended. Auto-switching to Work...");
             playSound(document.getElementById("breakSoundType") ? document.getElementById("breakSoundType").value : 'melody');
             await updateBreakStats();
+            
+            // AUTO START WORK LOGIC
             switchMode("work");
+            sessionStart = Date.now();
+            sessionTotalSeconds = durations.work * 60;
+            startTimer(false); // Triggers notifyBot("start") inside
         }
     }
 
@@ -672,17 +688,35 @@
     }
 
     window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); console.log("[DEBUG] showBreakDecisionModal"); }
+    
+    // -------------------------------------------------------------
+    // LOGIC UPDATE: Handle Break Decision (Short vs Long)
+    // -------------------------------------------------------------
     window.handleBreakDecision = function(decision) {
         document.getElementById("breakModal").classList.remove("open");
         console.log("[DEBUG] handleBreakDecision:", decision);
+        
         if (decision === 'take') {
             currentStreak++; updateStreakUI();
+            
+            // Logic: Short vs Long Break based on Cycle & Interval
             let nextMode = "short";
-            if (pomodoroCycleCount >= longBreakInterval) { nextMode = "long"; pomodoroCycleCount = 0; }
+            console.log(`[DEBUG] Cycle Logic: Count=${pomodoroCycleCount}, Interval=${longBreakInterval}`);
+            
+            // If cycle count matches interval (e.g. 2 % 2 == 0), trigger Long Break
+            if (pomodoroCycleCount % longBreakInterval === 0) {
+                console.log("[DEBUG] Triggering LONG BREAK");
+                nextMode = "long";
+            } else {
+                console.log("[DEBUG] Triggering SHORT BREAK");
+                nextMode = "short";
+            }
+            
             switchMode(nextMode); 
             sessionStart = Date.now();
             sessionTotalSeconds = durations[nextMode] * 60;
-            startTimer(false);
+            startTimer(false); // Start Break Timer
+            
         } else if (decision === 'skip') {
             if (currentStreak > 0) alert("Wellness Check: Streak Reset! 😢\nTake breaks to avoid burnout.");
             currentStreak = 0; updateStreakUI();
