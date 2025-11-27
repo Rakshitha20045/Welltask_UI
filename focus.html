@@ -416,43 +416,46 @@
     document.getElementById("btnLong").onclick = () => switchMode("long");
     
     // --------------------------------------------------------------------------------
-    // NEW notifyBot: proxy to your Vercel serverless function at /api/cliqWebhook
+    // UPDATED notifyBot: Uses internal Vercel Proxy to fix CORS
     // --------------------------------------------------------------------------------
     async function notifyBot(type, taskName, duration, taskId) {
-        const webhookUrl = "/api/cliqWebhook"; // must deploy cliqWebhook serverless on Vercel at /api
+        // POINT TO YOUR VERCEL API ROUTE (The Proxy)
+        const webhookUrl = "/api/cliqWebhook"; 
+
         const data = {
-            type: type, // 'start' or 'end'
+            type: type, 
             task: taskName || "Focus Session",
             duration: duration || 0,
-            userId: userId,
+            userId: userId, 
             boardId: boardId,
             taskId: taskId || (taskSelect ? taskSelect.value : null),
             ts: new Date().toISOString()
         };
-        console.log("[DEBUG] notifyBot called", { webhookUrl, data });
+        
+        console.log(`[DEBUG] notifyBot: Preparing to send '${type}' signal via Proxy...`);
+        console.log("[DEBUG] Payload:", JSON.stringify(data, null, 2));
 
         try {
+            // Send request to your OWN backend, not Zoho directly
             const res = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
             
-            // --- UPDATED DEBUG LOGGING ---
-            const resText = await res.text().catch(()=>null);
-            console.log("[DEBUG] proxy POST status:", res.status, "body:", resText);
-            // -----------------------------
+            const resText = await res.text();
+            console.log(`[DEBUG] Proxy HTTP Status: ${res.status}`);
+            console.log("[DEBUG] Proxy Raw Response:", resText);
 
             if (res.ok) {
-                console.log("[DEBUG] Bot notified via proxy.");
+                console.log("[SUCCESS] Bot notified successfully via proxy.");
                 return { ok: true, via: 'proxy', body: resText };
             } else {
-                console.warn("[WARN] proxy returned non-ok status", res.status);
-                console.warn("[WARN] proxy response text:", resText);
+                console.error("[ERROR] Proxy returned error status.");
                 return { ok: false, status: res.status, text: resText };
             }
         } catch (err) {
-            console.error("[ERROR] notifyBot proxy failed:", err);
+            console.error("[CRITICAL] Network/Proxy call failed:", err);
             return { ok: false, error: err.toString() };
         }
     }
