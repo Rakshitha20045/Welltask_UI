@@ -437,15 +437,19 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            console.log("[DEBUG] proxy POST status:", res.status);
+            
+            // --- UPDATED DEBUG LOGGING ---
+            const resText = await res.text().catch(()=>null);
+            console.log("[DEBUG] proxy POST status:", res.status, "body:", resText);
+            // -----------------------------
+
             if (res.ok) {
                 console.log("[DEBUG] Bot notified via proxy.");
-                return { ok: true, via: 'proxy' };
+                return { ok: true, via: 'proxy', body: resText };
             } else {
                 console.warn("[WARN] proxy returned non-ok status", res.status);
-                const text = await res.text().catch(()=>null);
-                console.warn("[WARN] proxy response text:", text);
-                return { ok: false, status: res.status, text };
+                console.warn("[WARN] proxy response text:", resText);
+                return { ok: false, status: res.status, text: resText };
             }
         } catch (err) {
             console.error("[ERROR] notifyBot proxy failed:", err);
