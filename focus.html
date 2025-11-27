@@ -20,17 +20,13 @@
             --radius-main: 6px;
             --radius-card: 12px;
         }
-
         * { box-sizing: border-box; }
-
         body {
             margin: 0; font-family: 'Inter', sans-serif;
             background-color: var(--bg-current); color: var(--text-white);
             transition: background-color 0.4s ease; min-height: 100vh;
             display: flex; flex-direction: column;
         }
-
-        /* Header */
         .app-header { max-width: 620px; margin: 0 auto; width: 100%; padding: 20px 12px; display: flex; justify-content: space-between; align-items: center; }
         .logo { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
         .header-actions { display: flex; gap: 10px; }
@@ -41,7 +37,6 @@
         }
         .header-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
-        /* Timer Area */
         .main-container { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 20px; width: 100%; max-width: 480px; margin: 0 auto; }
         .timer-box { background-color: rgba(255, 255, 255, 0.1); padding: 30px 40px; border-radius: var(--radius-main); text-align: center; width: 100%; margin-bottom: 25px; position: relative; }
         .timer-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
@@ -72,7 +67,6 @@
         }
         .restore-btn:hover { background: rgba(255,255,255,0.2); }
 
-        /* Modals */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: flex-start; z-index: 2000; padding: 20px; overflow-y: auto; }
         .modal-overlay.open { display: flex; }
         .modal-content { width: 100%; max-width: 550px; margin-top: 40px; animation: slideDown 0.3s ease; }
@@ -82,7 +76,6 @@
         .dark-card { background: var(--card-dark); border-radius: var(--radius-card); padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); }
         .card-title { font-size: 14px; font-weight: 700; color: #94a3b8; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
 
-        /* Report Specifics */
         .report-nav { display: flex; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
         .report-tab { background: none; border: none; color: #94a3b8; font-size: 14px; font-weight: 600; cursor: pointer; padding-bottom: 5px; }
         .report-tab.active { color: white; border-bottom: 2px solid white; }
@@ -107,13 +100,11 @@
         }
         .restore-list-btn:hover { background: #4ade80; color: #0f172a; }
 
-        /* Break Modal */
         .break-option-btn { width: 100%; padding: 15px; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; background: rgba(0,0,0,0.2); color: white; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
         .break-option-btn:hover { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
         .break-option-btn strong { display: block; font-size: 15px; margin-bottom: 2px; }
         .break-option-btn small { font-size: 11px; color: #94a3b8; }
 
-        /* Inputs & Themes */
         label { display: block; font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
         select, input[type="number"] { width: 100%; background: #0f172a; border: 1px solid #334155; padding: 10px; border-radius: 6px; color: white; font-size: 14px; outline: none; }
         input[type="range"] { width: 100%; accent-color: var(--bg-current); }
@@ -131,6 +122,7 @@
         input:checked + .slider:before { transform: translateX(18px); }
         .sound-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
         .sound-col { flex: 1; }
+        .input-group { margin-top:10px; }
     </style>
 </head>
 <body>
@@ -265,7 +257,6 @@
 
             <div id="viewActivity">
                 <div class="time-filter-row">
-                    <!-- FIX: pass this to updateReportPeriod -->
                     <button class="time-filter-btn active" onclick="updateReportPeriod('daily', this)">Daily</button>
                     <button class="time-filter-btn" onclick="updateReportPeriod('weekly', this)">Weekly</button>
                     <button class="time-filter-btn" onclick="updateReportPeriod('monthly', this)">Monthly</button>
@@ -295,10 +286,9 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, increment, onSnapshot, collection, addDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-    // Your web app's Firebase configuration
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
       authDomain: "welltask-8bbcf.firebaseapp.com",
@@ -317,14 +307,14 @@
     const userName = params.get("userName") || "User";
     const boardId  = params.get("boardId")  || userId;
 
+    console.log("[DEBUG] FocusHub init:", { userId, userName, boardId });
+
     document.getElementById("userLabel").textContent = userName;
 
     let currentMode = "work";
     let durations = { work: 25, short: 5, long: 15 };
     let remainingSeconds = 25 * 60;
-    // NEW: track total seconds for the CURRENT session
     let sessionTotalSeconds = remainingSeconds;
-
     let timerInterval = null;
     let tickInterval = null;
     let userStatsDocCache = null;
@@ -354,14 +344,13 @@
     const taskSelect = document.getElementById("focusTaskSelect");
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    function getVolume() { return document.getElementById("volumeSlider").value / 100; }
+    function getVolume() { return document.getElementById("volumeSlider") ? document.getElementById("volumeSlider").value / 100 : 0.5; }
     function playSound(type) {
         if (type === "none") return;
         if (audioCtx.state === "suspended") audioCtx.resume();
         const vol = getVolume();
         if (vol <= 0.01) return;
         const now = audioCtx.currentTime;
-        
         const playTone = (freq, wavetype, start, dur) => {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -381,6 +370,7 @@
 
     function startTicking() {
         if (tickInterval) clearInterval(tickInterval);
+        if (!document.getElementById("tickToggle")) return;
         if (!document.getElementById("tickToggle").checked) return;
         tickInterval = setInterval(() => {
             const vol = getVolume() * 0.2;
@@ -412,9 +402,7 @@
         stopTimer();
         currentMode = mode;
         remainingSeconds = durations[mode] * 60;
-        // NEW: reset session total when switching modes
         sessionTotalSeconds = remainingSeconds;
-
         document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
         document.getElementById(mode === 'work' ? 'btnWork' : mode === 'short' ? 'btnShort' : 'btnLong').classList.add("active");
         applyTheme(activeTheme);
@@ -428,26 +416,40 @@
     document.getElementById("btnLong").onclick = () => switchMode("long");
     
     // --------------------------------------------------------------------------------
-    // NEW FUNCTION: Notify Bot via Incoming Webhook
+    // NEW notifyBot: proxy to your Vercel serverless function at /api/cliqWebhook
     // --------------------------------------------------------------------------------
-    async function notifyBot(type, taskName, duration) {
-        const webhookUrl = "https://cliq.zoho.com/api/v2/bots/welltask/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360";
+    async function notifyBot(type, taskName, duration, taskId) {
+        const webhookUrl = "/api/cliqWebhook"; // must deploy cliqWebhook serverless on Vercel at /api
         const data = {
             type: type, // 'start' or 'end'
             task: taskName || "Focus Session",
             duration: duration || 0,
             userId: userId,
-            boardId: boardId
+            boardId: boardId,
+            taskId: taskId || (taskSelect ? taskSelect.value : null),
+            ts: new Date().toISOString()
         };
+        console.log("[DEBUG] notifyBot called", { webhookUrl, data });
+
         try {
-            await fetch(webhookUrl, {
+            const res = await fetch(webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            console.log("Bot notified:", type);
-        } catch (error) {
-            console.error("Failed to notify bot:", error);
+            console.log("[DEBUG] proxy POST status:", res.status);
+            if (res.ok) {
+                console.log("[DEBUG] Bot notified via proxy.");
+                return { ok: true, via: 'proxy' };
+            } else {
+                console.warn("[WARN] proxy returned non-ok status", res.status);
+                const text = await res.text().catch(()=>null);
+                console.warn("[WARN] proxy response text:", text);
+                return { ok: false, status: res.status, text };
+            }
+        } catch (err) {
+            console.error("[ERROR] notifyBot proxy failed:", err);
+            return { ok: false, error: err.toString() };
         }
     }
     
@@ -464,14 +466,15 @@
         startBtn.style.transform = "translateY(4px)";
         startBtn.style.boxShadow = "none";
         
-        // NOTIFY BOT ON START
+        // NOTIFY BOT ON START (pass taskId)
         if (currentMode === "work") {
             finishBtn.style.display = 'flex';
             const taskName = taskSelect.options[taskSelect.selectedIndex].text;
-            notifyBot("start", taskName, durations.work);
+            const tid = taskSelect.value;
+            notifyBot("start", taskName, durations.work, tid).then(r => console.log("[DEBUG] notifyBot start result:", r));
         }
 
-        if (document.getElementById("tickToggle").checked) startTicking();
+        if (document.getElementById("tickToggle") && document.getElementById("tickToggle").checked) startTicking();
         timerInterval = setInterval(() => {
             remainingSeconds--;
             updateTimeDisplay();
@@ -499,14 +502,15 @@
         const tid = taskSelect.value;
         const taskName = taskSelect.options[taskSelect.selectedIndex].text;
 
+        console.log("[DEBUG] finishBtn clicked:", { tid, minsSpent });
+
         if (tid) {
             await updateStats(minsSpent);
             await markTaskAsDone(tid, minsSpent);
             await logDailyTaskWork(tid, minsSpent);
-            // Notify bot session ended early manually
-            notifyBot("end", taskName, minsSpent);
+            // Notify bot session ended early manually (pass taskId)
+            notifyBot("end", taskName, minsSpent, tid).then(r => console.log("[DEBUG] notifyBot end (finish early) result:", r));
         }
-        // Reset to full focus duration for next session
         remainingSeconds = durations.work * 60;
         sessionTotalSeconds = remainingSeconds;
         updateTimeDisplay();
@@ -517,13 +521,12 @@
     async function completeTimer() {
         stopTimer();
         if (currentMode === "work") {
-            // NEW: compute actual elapsed time from this session
             const total = sessionTotalSeconds || (durations.work * 60);
             const elapsedSeconds = total - remainingSeconds;
             const mins = Math.max(1, Math.round(elapsedSeconds / 60));
 
             pomodoroCycleCount++;
-            playSound(document.getElementById("workSoundType").value);
+            playSound(document.getElementById("workSoundType") ? document.getElementById("workSoundType").value : 'digital');
             await updateStats(mins);
             const tid = taskSelect.value;
             const taskName = taskSelect.options[taskSelect.selectedIndex].text;
@@ -533,12 +536,12 @@
                 await logDailyTaskWork(tid, mins);
             }
             
-            // NOTIFY BOT ON END
-            notifyBot("end", taskName, mins);
+            // NOTIFY BOT ON END (pass taskId)
+            notifyBot("end", taskName, mins, tid).then(r => console.log("[DEBUG] notifyBot end result:", r));
             
             showBreakDecisionModal();
         } else {
-            playSound(document.getElementById("breakSoundType").value);
+            playSound(document.getElementById("breakSoundType") ? document.getElementById("breakSoundType").value : 'melody');
             await updateBreakStats();
             if (document.getElementById("autoSwitchToggle").checked) { switchMode("work"); } else { switchMode("work"); }
         }
@@ -553,9 +556,10 @@
         } catch(e) { console.error(e); }
     }
 
-    window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); }
+    window.showBreakDecisionModal = function() { document.getElementById("breakModal").classList.add("open"); console.log("[DEBUG] showBreakDecisionModal"); }
     window.handleBreakDecision = function(decision) {
         document.getElementById("breakModal").classList.remove("open");
+        console.log("[DEBUG] handleBreakDecision:", decision);
         if (decision === 'take') {
             currentStreak++; updateStreakUI();
             let nextMode = "short";
@@ -566,7 +570,6 @@
             currentStreak = 0; updateStreakUI();
             switchMode("work"); if(document.getElementById("autoSwitchToggle").checked && taskSelect.value) startTimer();
         } else if (decision === 'remind') {
-            // NEW: treat this as a fresh 5-minute focus session
             currentMode = 'work';
             remainingSeconds = 5 * 60;
             sessionTotalSeconds = 5 * 60;
@@ -578,7 +581,7 @@
     function updateStreakUI() {
         document.getElementById("streakCount").textContent = currentStreak;
         if (currentStreak > 0) document.getElementById("streakBadge").style.opacity = 1;
-        if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak });
+        if(userStatsDocCache) updateDoc(userStatsDocCache, { current_streak: currentStreak }).then(()=>console.log("[DEBUG] updated userStats current_streak")).catch(e=>console.warn(e));
     }
 
     // --- RESTORE TASK LOGIC ---
@@ -680,7 +683,6 @@
         });
     }
 
-    // --- TASK CHART (NO BUTTONS, TOTAL ONLY) ---
     function generateTaskChart() {
         const labels = [];
         const data = [];
@@ -727,15 +729,17 @@
         document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
         
         ['work', 'short', 'long'].forEach(mode => {
-            document.getElementById(`${mode}Duration`).addEventListener('input', (e) => {
-                durations[mode] = parseInt(e.target.value) || 1;
-                if(currentMode === mode && !timerInterval) {
-                    remainingSeconds = durations[mode] * 60;
-                    // NEW: keep session total in sync with changed duration
-                    sessionTotalSeconds = remainingSeconds;
-                    updateTimeDisplay();
-                }
-            });
+            const el = document.getElementById(`${mode}Duration`);
+            if (el) {
+                el.addEventListener('input', (e) => {
+                    durations[mode] = parseInt(e.target.value) || 1;
+                    if(currentMode === mode && !timerInterval) {
+                        remainingSeconds = durations[mode] * 60;
+                        sessionTotalSeconds = remainingSeconds;
+                        updateTimeDisplay();
+                    }
+                });
+            }
         });
         document.getElementById("intervalSlider").addEventListener('input', (e) => {
              longBreakInterval = parseInt(e.target.value); document.getElementById("intervalDisplay").textContent = `${longBreakInterval} Pomodoros`;
@@ -746,6 +750,7 @@
 
         // Subscribe to Firestore commands from bot
         subscribeToBotCommandsFirestore();
+        console.log("[DEBUG] init completed");
     }
 
     async function loadUserStats() {
@@ -765,6 +770,7 @@
             document.getElementById("repPomos").textContent = data.today_pomodoros || 0;
             document.getElementById("repMinutes").textContent = data.today_focus_minutes || 0;
             document.getElementById("repBreaks").textContent = data.breaks_today || 0;
+            console.log("[DEBUG] loadUserStats done", data);
         } catch (err) { console.error(err); }
     }
 
@@ -772,7 +778,7 @@
         try {
             const boardRef = doc(db, "boards", boardId);
             const snap = await getDoc(boardRef);
-            if (!snap.exists()) return;
+            if (!snap.exists()) { console.warn("[WARN] board doc not found:", boardId); taskSelect.innerHTML = '<option value="">(Select a Task to Start)</option>'; return; }
             const bData = snap.data();
             const tasks = bData.tasks || [];
             cachedTasks = tasks;
@@ -793,6 +799,7 @@
                 opt.textContent = `${dispName} • ${projName}`;
                 taskSelect.appendChild(opt);
             });
+            console.log("[DEBUG] loadBoardTasksIntoDropdown loaded tasks:", openTasks.length);
         } catch (err) { console.error(err); }
     }
     
@@ -801,12 +808,14 @@
         await updateDoc(userStatsDocCache, { today_pomodoros: increment(1), today_focus_minutes: increment(mins), current_streak: currentStreak });
         const minsEl = document.getElementById("repMinutes"); const pomoEl = document.getElementById("repPomos");
         minsEl.textContent = parseInt(minsEl.textContent) + mins; pomoEl.textContent = parseInt(pomoEl.textContent) + 1;
+        console.log("[DEBUG] updateStats added mins:", mins);
     }
 
     async function updateBreakStats() {
         if (!userStatsDocCache) return;
         await updateDoc(userStatsDocCache, { breaks_today: increment(1) });
         const brkEl = document.getElementById("repBreaks"); brkEl.textContent = parseInt(brkEl.textContent) + 1;
+        console.log("[DEBUG] updateBreakStats incremented");
     }
 
     async function updateTaskStatsOnly(tid, mins) {
@@ -825,6 +834,7 @@
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
+            console.log("[DEBUG] updateTaskStatsOnly updated:", { tid, mins });
         } catch(e) { console.error(e); }
     }
     
@@ -843,6 +853,7 @@
                     tx.update(boardRef, { tasks: tasks });
                 }
             });
+            console.log("[DEBUG] markTaskAsDone:", { tid, mins });
         } catch(e) { 
             console.error(e); 
             alert("Failed to mark as done. Please check your connection.");
