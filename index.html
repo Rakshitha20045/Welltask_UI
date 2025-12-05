@@ -13,16 +13,13 @@
       darkMode: "class",
       theme: {
         extend: {
-          colors: {
-            gray: { 750: "#2d3748" }
-          }
+          colors: { gray: { 750: "#2d3748" } }
         }
       }
     };
   </script>
 
   <style>
-    /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
@@ -43,8 +40,6 @@
       appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
       measurementId: "G-3HD74YPC52"
     };
-
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     console.log("🔥 Firebase initialized.");
@@ -59,21 +54,20 @@
     // 🔒 1. SECURITY & AUTHENTICATION (THE WINDOW)
     // ======================================================
     
-    // Parse Secure Parameters from Zoho
+    // Parse Secure Parameters from Zoho URL
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
     const mode = urlParams.get("mode") || "personal"; // "personal" or "team"
     const channelId = urlParams.get("channelId");     // "123..." (Only present in team mode)
 
     let currentUser = null;
-    let currentBoardId = null; // We find this from the database, never from URL
+    let currentBoardId = null; 
 
     // Decode Identity Token
     if (token) {
       try {
         const decoded = atob(token);
         const parts = decoded.split("::");
-        // Token format: email::id::name
         if (parts.length >= 3) {
           currentUser = {
             email: parts[0],
@@ -87,7 +81,7 @@
       }
     }
 
-    // BLOCK ACCESS if no identity (Authentication Window)
+    // BLOCK ACCESS if no identity (The "Authentication Window")
     if (!currentUser) {
         document.body.innerHTML = `
             <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans">
@@ -105,7 +99,7 @@
     // 💾 2. FIREBASE SECURE LOGIC
     // ======================================================
 
-    // QUERY: Find the board this user OWNS for this CONTEXT
+    // QUERY: Find the board matching Identity + Context
     async function firebaseSecureLoad() {
         try {
             console.log(`🔍 Querying for ${mode} board...`);
@@ -114,11 +108,13 @@
             let q = db.collection("boards")
                       .where("allowed_users", "array-contains", currentUser.email);
 
-            // CONTEXT CHECK: Must match the mode and channel
+            // CONTEXT CHECK: Determine Personal vs Team
             if (mode === "team" && channelId) {
+                console.log("👥 TEAM MODE: Filtering by Channel ID " + channelId);
                 q = q.where("channel_id", "==", channelId);
                 q = q.where("board_type", "==", "team");
             } else {
+                console.log("👤 PERSONAL MODE: Filtering for Personal Board");
                 q = q.where("board_type", "==", "personal");
             }
 
@@ -131,14 +127,13 @@
                 currentBoardId = doc.id;
                 return doc.data();
             } else {
-                // ⚠️ Not found. Need to create it.
+                // ⚠️ Not found.
                 return null; 
             }
         } catch (e) {
             console.error("💥 Query Error:", e);
             if(e.message.includes("requires an index")) {
-                // This alert helps you create the index during development
-                alert("DEV ACTION REQUIRED: Check console for Firebase Index link.");
+                alert("DEV NOTE: Open Console (F12) & Click the Firebase Index Link!");
             }
             return null;
         }
@@ -205,7 +200,7 @@
         renderApp();
       },
 
-      // AUTO-CREATE SECURE BOARD
+      // AUTO-CREATE SECURE BOARD (Handles Personal OR Team)
       initSecureDefaults: async () => {
         console.log("🚀 Initializing new Secure Board...");
         const newDocId = uid(); 
@@ -222,19 +217,27 @@
           { id: "duedate", name: "Due Date", isDefault: true }
         ];
 
+        // DYNAMIC SETUP BASED ON MODE
+        const isTeam = (mode === "team");
+        const boardName = isTeam ? "Team Tasks" : "My Personal Tasks";
+        const wsName = isTeam ? "Team Workspace" : "My Workspace";
+
         const payload = {
             // 🔒 SECURITY FIELDS
             boardid: newDocId,
+            
+            // Allow creator initially. Use /syncmembers to add others for Team.
             allowed_users: [currentUser.email], 
+            
             board_type: mode, 
             channel_id: channelId || null,
             owner_email: currentUser.email,
-            name: mode === "team" ? "Team Board" : "Personal Board",
+            name: boardName,
 
             // DATA
             darkMode: false,
             currentView: "list",
-            workspaces: [{ id: wsId, name: mode === "team" ? "Team Workspace" : "My Workspace" }],
+            workspaces: [{ id: wsId, name: wsName }],
             projects: [{ id: pId, name: "General Project", color: "bg-blue-500", workspaceId: wsId }],
             groups: [
                 { id: g1, name: "To Do", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
@@ -294,7 +297,7 @@
     }
 
     // ======================================================
-    // ⚡ 5. ACTIONS & UI HANDLERS
+    // ⚡ 5. ACTIONS & UI HANDLERS (Standard)
     // ======================================================
     const actions = {
       toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
@@ -648,7 +651,7 @@
                         <div class="overflow-x-auto rounded-lg border dark:border-gray-700">
                           <table class="w-full text-left border-collapse">
                             <thead>
-                              <tr class="bg-gray-5 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
+                              <tr class="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
                                 <th class="w-8 p-2 text-center"></th>
                                 ${group.columns.map(col => `
                                   <th class="font-normal p-2 border-r dark:border-gray-700 min-w-[150px] group/col">
@@ -794,7 +797,6 @@
       const app = document.getElementById("app");
       if (!app) return;
 
-      // Dark Mode Toggle
       document.documentElement.classList.toggle("dark", state.darkMode);
       const bgColor = state.darkMode ? "bg-gray-900" : "bg-gray-50";
 
