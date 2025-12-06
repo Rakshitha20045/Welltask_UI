@@ -160,6 +160,30 @@
 
     let state = { ...initialState };
 
+    function checkBoardPermission(board) {
+      if (!board) return false;
+      if (!currentUser) return false;
+
+      const email = currentUser.email;
+      const type = board.type || "personal";
+      const allowed = board.allowed_users || [];
+
+      // PERSONAL BOARD
+      if (type === "personal") {
+        // Only EXACT allowed user can open it
+        return allowed.includes(email);
+      }
+
+      // TEAM BOARD
+      if (type === "team") {
+        // User must be in allowed_users list
+        return allowed.includes(email);
+      }
+
+      return false;
+    }
+
+
     const api = {
       saveTimer: null,
       load: async () => {
@@ -195,21 +219,23 @@
             if (docId) {
               const fbData = await firebaseLoadBoard(docId);
               if (fbData) {
-                const isPersonal = fbData.type === 'personal' || !fbData.type;
-                if (mode === 'team' && isPersonal) {
-                  const docOwnerId = fbData.ownerId || docId;
-                  if (state.currentUser && docOwnerId !== state.currentUser.id) {
-                    console.error("Security Alert: Attempt to access personal board via team mode");
-                    alert("You cannot access a personal board in team mode.");
-                    state.showLogin = true;
-                    renderApp();
-                    return;
-                  }
+                // 🔐 SECURITY CHECK
+                const hasAccess = checkBoardPermission(fbData);
+
+                if (!hasAccess) {
+                  alert("🚫 You do not have permission to access this board.");
+                  state.showLogin = true;
+                  renderApp();
+                  return;
                 }
+
                 applyLoadedState(fbData);
                 loaded = true;
-                if (key) localStorage.setItem(key, JSON.stringify(fbData));
+
+                if (key)
+                  localStorage.setItem(key, JSON.stringify(fbData));
               }
+
             }
           }
 
@@ -261,6 +287,17 @@
         try {
           state.saveStatus = "saving";
           renderStatusIndicator();
+          let allowedUsers = [];
+
+          if (mode === "personal") {
+            allowedUsers = [state.currentUser.email];  // Only owner allowed
+          } else {
+            // TEAM MODE → Do not overwrite existing allowed users
+            const existing = await firebaseLoadBoard(docId);
+            allowedUsers = existing?.allowed_users || [];
+          }
+
+          // 🔐 New secure payload
           const payload = {
             darkMode: state.darkMode,
             currentView: state.currentView,
@@ -269,8 +306,11 @@
             groups: state.groups,
             tasks: state.tasks,
             type: mode === 'team' ? 'team' : 'personal',
-            ownerId: state.currentUser ? state.currentUser.id : null
+            ownerId: state.currentUser ? state.currentUser.id : null,
+            allowed_users: allowedUsers,
+            updatedAt: Date.now()
           };
+
 
           const key = getStorageKey();
           if (key) localStorage.setItem(key, JSON.stringify(payload));
@@ -694,8 +734,8 @@
         <div class="flex-1 overflow-x-auto overflow-y-hidden p-6">
           <div class="flex h-full gap-6">
             ${projectGroups.map(group => {
-              const tasks = state.tasks.filter(t => t.groupId === group.id);
-              return `
+        const tasks = state.tasks.filter(t => t.groupId === group.id);
+        return `
                 <div class="w-80 flex flex-col h-full bg-gray-100 dark:bg-gray-800/50 rounded-xl border dark:border-gray-700">
                   <div class="p-3 font-semibold text-gray-700 dark:text-gray-200 flex justify-between items-center">
                     <span>${group.name}</span>
@@ -722,7 +762,7 @@
                   <div class="p-2"><button onclick="actions.setShowNewTask('${group.id}'); actions.setView('list')" class="w-full py-2 text-sm text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center gap-1"><i data-lucide="plus" class="w-4 h-4"></i> Add Task</button></div>
                 </div>
               `;
-            }).join('')}
+      }).join('')}
             <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-500">+ Add Section</button>
           </div>
         </div>
