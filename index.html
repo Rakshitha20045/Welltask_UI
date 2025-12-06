@@ -20,6 +20,7 @@
   </script>
 
   <style>
+    /* Custom Scrollbar from your original design */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
@@ -52,20 +53,21 @@
 
   <script>
     // ======================================================
-    // 🔒 1. SECURITY & AUTHENTICATION
+    // 🔒 1. SECURITY & AUTHENTICATION (THE WINDOW)
     // ======================================================
     
+    // Parse Secure Parameters from Zoho
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
     const mode = urlParams.get("mode") || "personal"; 
-    // Handle empty channelId string from Zoho
+    // Handle empty channelId string from Zoho logic
     const rawChannelId = urlParams.get("channelId");
     const channelId = (rawChannelId && rawChannelId.trim() !== "") ? rawChannelId : null;
 
     let currentUser = null;
     let currentBoardId = null; 
 
-    // Decode Token
+    // Decode Token to verify Identity
     if (token) {
       try {
         const decoded = atob(token);
@@ -83,7 +85,7 @@
       }
     }
 
-    // THE AUTHENTICATION WINDOW
+    // THE AUTHENTICATION WINDOW (Blocks access if invalid)
     if (!currentUser) {
         document.body.innerHTML = `
             <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans">
@@ -98,7 +100,7 @@
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
     // ======================================================
-    // 💾 2. SECURE FIREBASE LOGIC
+    // 💾 2. SECURE FIREBASE LOGIC (OWNERSHIP VALIDATION)
     // ======================================================
 
     async function firebaseSecureLoad() {
@@ -109,7 +111,7 @@
             let q = db.collection("boards")
                       .where("allowed_users", "array-contains", currentUser.email);
 
-            // CONTEXT CHECK
+            // CONTEXT CHECK: Filter by Team or Personal
             if (mode === "team" && channelId) {
                 console.log("👥 TEAM MODE DETECTED");
                 q = q.where("channel_id", "==", channelId);
@@ -133,7 +135,7 @@
         } catch (e) {
             console.error("💥 Query Error:", e);
             if(e.message.includes("requires an index")) {
-                // ALERT for Personal Mode Index creation
+                // IMPORTANT: This alert helps you fix the index during development
                 alert("DEV NOTE: Open Console (F12) -> Click the Firebase Index Link!");
             }
             return null;
@@ -151,7 +153,7 @@
     }
 
     // ======================================================
-    // 🧠 3. STATE & API
+    // 🧠 3. STATE MANAGEMENT
     // ======================================================
     const initialState = {
       darkMode: false,
@@ -166,6 +168,9 @@
 
     let state = { ...initialState };
 
+    // ======================================================
+    // ⚙️ 4. API & LOGIC
+    // ======================================================
     const api = {
       saveTimer: null,
       
@@ -176,7 +181,7 @@
         if (fbData) {
             applyLoadedState(fbData);
         } else {
-            // Auto-Create if missing
+            // Auto-Create if missing (Replacing /createworkspace)
             await api.initSecureDefaults();
         }
 
@@ -247,7 +252,7 @@
     }
 
     // ======================================================
-    // ⚡ 5. ACTIONS
+    // ⚡ 5. ACTIONS (Your Original UI Logic)
     // ======================================================
     const actions = {
       toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
@@ -282,7 +287,7 @@
     window.actions = actions;
 
     // ======================================================
-    // 🎨 6. RENDERING FUNCTIONS (MOVED TO GLOBAL SCOPE)
+    // 🎨 6. RENDERING FUNCTIONS (Fix: Moved to Global Scope)
     // ======================================================
     
     function priorityClass(p) { 
@@ -294,7 +299,7 @@
       el.innerHTML = state.saveStatus==="saving" ? '<span class="text-blue-500">Saving...</span>' : state.saveStatus==="error" ? '<span class="text-red-500">Error</span>' : state.saveStatus==="pending" ? '...' : '<span class="text-green-500">Saved</span>';
     }
 
-    // DEFINED GLOBALLY TO FIX REFERENCE ERROR
+    // ✅ GLOBAL RENDER FUNCTION (Previously this was hidden or missing)
     function renderCellForColumn(task, col) {
       if (col.id === 'task') {
         return state.ui.editingTaskId === task.id
