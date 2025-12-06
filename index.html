@@ -586,7 +586,24 @@
                   <i data-lucide="${collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
                 </button>
 
-                <span class="font-medium truncate text-sm">${w.name}</span>
+                ${state.ui.editingWorkspaceId === w.id
+            ? `
+      <input id="ws-name-input-${w.id}"
+             class="text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32"
+             value="${state.ui.editingWorkspaceName}"
+             onblur="actions.saveWorkspaceName('${w.id}')"
+             onkeydown="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')"
+             autofocus
+      />
+    `
+            : `
+      <span class="font-medium truncate text-sm cursor-text"
+            ondblclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')">
+        ${w.name}
+      </span>
+    `
+          }
+
 
               </div>
 
