@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>WellTask</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -12,11 +12,7 @@
     tailwind.config = {
       darkMode: "class",
       theme: {
-        extend: {
-          colors: {
-            gray: { 750: "#2d3748" }
-          }
-        }
+        extend: { colors: { gray: { 750: "#2d3748" } } }
       }
     };
   </script>
@@ -26,10 +22,40 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
     .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
+    /* debug overlay */
+    #welltask-debug {
+      position: fixed;
+      right: 8px;
+      bottom: 8px;
+      z-index: 99999;
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      line-height: 1.2;
+      max-width: 320px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    }
   </style>
 
+  <!-- Firebase compat libs (same as your existing setup) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 transition-colors duration-200">
+  <div id="app"></div>
+
+  <!-- debug overlay -->
+  <div id="welltask-debug" aria-hidden="true" style="display:none">
+    <div id="wt-d-mode">mode: -</div>
+    <div id="wt-d-channel">channelId: -</div>
+    <div id="wt-d-token">token: -</div>
+    <div id="wt-d-board">boardId: -</div>
+    <div id="wt-d-user">user: -</div>
+  </div>
 
   <script>
     // ---------------- FIREBASE CONFIG (unchanged) ----------------
@@ -45,55 +71,70 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    console.log("🔥 Firebase initialized.");
+    console.log("🔥 Firebase initialized (compat).");
   </script>
-</head>
-
-<body class="bg-gray-50 text-gray-800 transition-colors duration-200">
-  <div id="app"></div>
 
   <script>
     // ======================================================
-    // 🔒 1. SECURITY & AUTHENTICATION (THE WINDOW)
+    // 🔒 1. BOOTSTRAP / AUTHENTICATION WINDOW + PARAM DEBUGGING
     // ======================================================
-
-    console.log("🚀 WellTask UI Bootstrap start");
+    console.log("🚀 WellTask UI Boot");
 
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("token");
-    const mode = (urlParams.get("mode") || "personal").toLowerCase(); // "personal" or "team"
-    const channelId = urlParams.get("channelId") || null;
+    const tokenRawUrl = urlParams.get("token");
+    const modeRaw = (urlParams.get("mode") || "personal").toLowerCase();
+    const channelIdRaw = urlParams.get("channelId") || "";
 
-    console.log("DEBUG: urlParams -> mode:", mode, "channelId:", channelId);
+    // show all params for debugging
+    console.group("FRONTEND DEBUG: URL params");
+    for (const [k,v] of urlParams.entries()) console.log(k, "=", v);
+    console.log("modeRaw:", modeRaw, "channelIdRaw:", channelIdRaw);
+    console.groupEnd();
 
-    let currentUser = null;
-    let currentBoardId = null;
-
-    // Decode identity token (we expect base64)
-    if (token) {
-      try {
-        const decoded = atob(token);
-        console.log("DEBUG: decoded token raw:", decoded);
-        const parts = decoded.split("::");
-        if (parts.length >= 3) {
-          currentUser = {
-            email: parts[0],
-            id: parts[1],
-            name: parts[2],
-            token_ts: parts[3] || null
-          };
-          console.log("🔒 Identity Verified:", currentUser);
-        } else {
-          console.warn("Auth token decoded but unexpected format:", parts);
-        }
-      } catch (e) {
-        console.error("Auth Token Error decoding token:", e);
+    // defensive resolution: if channelId present, force team mode
+    let modeForced = modeRaw;
+    if (channelIdRaw && channelIdRaw.trim() !== "") {
+      if (modeRaw !== "team") {
+        console.warn("FRONTEND DEBUG: channelId present but mode != 'team' -> forcing mode='team'");
       }
-    } else {
-      console.warn("No token present in URL");
+      modeForced = "team";
     }
 
-    // AUTH WINDOW (deny if no identity)
+    // debug overlay helpers
+    const dbgEl = document.getElementById("welltask-debug");
+    const dbg = {
+      setMode: (m) => { document.getElementById("wt-d-mode").innerText = "mode: " + m; dbgEl.style.display = "block"; },
+      setChannel: (c) => document.getElementById("wt-d-channel").innerText = "channelId: " + (c || "-"),
+      setToken: (t) => document.getElementById("wt-d-token").innerText = "token: " + (t ? t.substring(0,20) + "..." : "-"),
+      setBoard: (b) => document.getElementById("wt-d-board").innerText = "boardId: " + (b || "-"),
+      setUser: (u) => document.getElementById("wt-d-user").innerText = "user: " + (u || "-")
+    };
+    dbg.setMode(modeForced);
+    dbg.setChannel(channelIdRaw);
+    dbg.setToken(tokenRawUrl);
+
+    // parse identity token (base64 from widget)
+    let currentUser = null;
+    try {
+      if (tokenRawUrl) {
+        const decoded = atob(tokenRawUrl);
+        console.log("FRONTEND DEBUG: decoded token raw ->", decoded);
+        const parts = decoded.split("::");
+        if (parts.length >= 3) {
+          currentUser = { email: parts[0], id: parts[1], name: parts[2], token_ts: parts[3] || null };
+          console.log("🔒 Identity Verified:", currentUser);
+          dbg.setUser(currentUser.email);
+        } else {
+          console.warn("FRONTEND DEBUG: token decoded but unexpected format:", parts);
+        }
+      } else {
+        console.warn("FRONTEND DEBUG: no token provided in URL");
+      }
+    } catch (e) {
+      console.error("FRONTEND DEBUG: error decoding token", e);
+    }
+
+    // if no user -> Authentication window (block)
     function showAuthFailure(msg) {
       console.error("AUTH FAILURE:", msg);
       document.body.innerHTML = `
@@ -108,78 +149,71 @@
     }
 
     if (!currentUser || !currentUser.email) {
-      showAuthFailure("No identity token detected or token invalid.");
+      showAuthFailure("No valid identity token found. Please open from Zoho Cliq.");
     }
 
-    // small util
+    // utility id generator
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
-    // ======================================================
-    // 💾 2. FIREBASE SECURE LOGIC (with ownership validation)
-    // ======================================================
+    // persistent state variables used by debug overlay
+    let currentBoardId = null;
 
+    // ======================================================
+    // 💾 2. FIRESTORE SECURE LOAD (PREFER channelId WHEN PRESENT)
+    // ======================================================
     async function firebaseSecureLoad() {
-      console.log(`🔍 [SECURE LOAD] Mode: ${mode} | User: ${currentUser.email} | channelId: ${channelId}`);
+      console.log(`🔍 [SECURE LOAD] modeForced=${modeForced} | user=${currentUser.email} | channelId=${channelIdRaw}`);
       try {
-        // Base query: user must be in allowed_users
-        let q = db.collection("boards").where("allowed_users", "array-contains", currentUser.email);
-
-        if (mode === "team" && channelId) {
-          console.log("👥 TEAM MODE: filter by channelId and board_type=team");
-          q = q.where("channel_id", "==", channelId).where("board_type", "==", "team");
+        let q;
+        // Prefer channelId lookup when present (defensive)
+        if (channelIdRaw && channelIdRaw.trim() !== "") {
+          console.log("API DEBUG: channelId present -> searching by channel_id + board_type=team + allowed_users");
+          q = db.collection("boards")
+                .where("channel_id", "==", channelIdRaw)
+                .where("board_type", "==", "team")
+                .where("allowed_users", "array-contains", currentUser.email);
         } else {
-          console.log("👤 PERSONAL MODE: filter by board_type=personal and owner");
-          q = q.where("board_type", "==", "personal");
-          // For personal we will later enforce owner_email === currentUser.email
+          console.log("API DEBUG: no channelId -> searching personal boards owned/allowed for user");
+          q = db.collection("boards")
+                .where("board_type", "==", "personal")
+                .where("allowed_users", "array-contains", currentUser.email);
         }
 
         const snap = await q.get();
-        console.log("DEBUG: firestore query returned docs:", snap.size);
-
+        console.log("returned docs:", snap.size);
         if (!snap.empty) {
-          // Try to find the best matching board:
           let chosenDoc = null;
-
-          // Prefer a board where owner_email matches currentUser (for personal)
           snap.forEach(doc => {
             const data = doc.data();
             console.log("DEBUG: candidate board:", doc.id, data.name, data.owner_email, data.channel_id);
-            if (mode === "personal") {
+            if (channelIdRaw && channelIdRaw.trim() !== "") {
+              // team mode - first match is fine
+              if (!chosenDoc) chosenDoc = { id: doc.id, data };
+            } else {
+              // personal mode - prefer owner match
               if (data.owner_email === currentUser.email) {
                 chosenDoc = { id: doc.id, data };
               }
-            } else {
-              // team mode: require channel_id match (already filtered) and allowed_users contains user
-              if (!chosenDoc) chosenDoc = { id: doc.id, data }; // take first matching team board
             }
           });
 
-          // If we didn't find owner match in personal mode, but there are candidate docs, deny.
           if (!chosenDoc) {
-            console.warn("⚠️ Board(s) found but none owned by current user. Access denied to prevent board-id spoofing.");
+            console.warn("⚠️ Board(s) found but none owned by current user (personal). Denying access.");
             return { access: false, reason: "found_board_not_owned" };
           }
 
-          // final verification
-          const boardData = chosenDoc.data;
-          // Extra safety: ensure that owner_email exists
-          if (!boardData.owner_email) {
-            console.warn("⚠️ Board missing owner_email field. Denying access.");
-            return { access: false, reason: "missing_owner" };
-          }
-
-          // All checks passed for chosen board:
           currentBoardId = chosenDoc.id;
-          console.log("✅ Secure Access Granted. Board ID (internal) :", currentBoardId, "owner:", boardData.owner_email);
-          return { access: true, boardId: chosenDoc.id, boardData };
+          console.log("✅ Secure Access Granted. Board ID (internal):", currentBoardId, "owner:", chosenDoc.data.owner_email);
+          dbg.setBoard(currentBoardId);
+          return { access: true, boardId: chosenDoc.id, boardData: chosenDoc.data };
         } else {
-          console.log("⚠️ No existing board found for this user/context.");
+          console.log("⚠️ No board found for this context.");
           return { access: false, reason: "not_found" };
         }
       } catch (e) {
         console.error("💥 Query Error:", e);
         if (e.message && e.message.includes("requires an index")) {
-          console.warn("DEV NOTE: Firestore requires an index for this query. Check console link from Firestore error.");
+          console.warn("DEV NOTE: Firestore requires an index for this query. Follow the Firestore console link.");
         }
         return { access: false, reason: "error", error: e };
       }
@@ -199,7 +233,6 @@
       }
     }
 
-    // Auto-create board (same structure as before) but ensure owner_email is the currentUser.email
     async function initSecureDefaults() {
       console.log("🚀 Initializing new Secure Board (AUTO-CREATE)...");
       const newDocId = uid();
@@ -216,20 +249,18 @@
         { id: "duedate", name: "Due Date", isDefault: true }
       ];
 
-      const isTeam = (mode === "team");
+      const isTeam = (modeForced === "team");
       const boardName = isTeam ? "Team Tasks" : "My Personal Tasks";
       const wsName = isTeam ? "Team Workspace" : "My Workspace";
 
       const payload = {
-        // SECURITY FIELDS
         boardid: newDocId,
         allowed_users: [currentUser.email],
-        board_type: mode,
-        channel_id: (isTeam ? channelId : null),
+        board_type: modeForced,
+        channel_id: (isTeam ? channelIdRaw : null),
         owner_email: currentUser.email,
         owner_id: currentUser.id,
 
-        // DATA
         name: boardName,
         darkMode: false,
         currentView: "list",
@@ -244,11 +275,12 @@
       };
 
       await firebaseSaveBoard(newDocId, payload);
+      dbg.setBoard(newDocId);
       return { created: true, boardId: newDocId, boardData: payload };
     }
 
     // ======================================================
-    // 🧠 3. APPLICATION STATE (unchanged UI logic)
+    // 🧠 3. APP STATE & UI (kept same as your original UI/logic)
     // ======================================================
     const initialState = {
       darkMode: false,
@@ -273,32 +305,7 @@
 
     let state = { ...initialState };
 
-    // ... (All UI rendering + actions exactly as you had them.)
-    // For brevity here, we still include the full functions below but unchanged
-    // except for minor logging additions. I'm going to paste them intact as
-    // in your original file, preserving UI and behavior exactly.
-  </script>
-
-  <!--
-    For readability I will insert the full unchanged UI + action code below.
-    (This is your original render + actions code with added debug console logs
-     in a few critical places such as save operations and event hooks.)
-  -->
-  <script>
-    // ---------- (copy actions, render helpers, renderApp, etc.) ----------
-    // I will paste your original action/rendering functions here exactly,
-    // only injecting console.log debug lines where saves, loads, and critical
-    // transitions occur. This ensures no UI/feature changes.
-
-    // --- priorityClass, renderStatusIndicator, renderSidebar, renderCellForColumn,
-    //     renderListView, renderColumnsPanel, renderKanbanView, renderApp ---
-    // --- actions object (with console.log in each method) ---
-    // (For brevity in this message I'm including the code; in your file paste the full
-    //  block from your prior index.html. The key is: do NOT change UI.)
-    
-    // START copy of your original code (unchanged UI) with debug logs:
-    console.log("DEBUG: injecting UI code (kept original behavior).");
-
+    // Basic helpers & UI rendering (kept same structure - with added console logs)
     function priorityClass(p) { return p==="Critical"?"bg-red-100 text-red-800":p==="High"?"bg-orange-100 text-orange-800":p==="Medium"?"bg-yellow-100 text-yellow-800":p==="Low"?"bg-green-100 text-green-800":"bg-gray-100 text-gray-800"; }
 
     function renderStatusIndicator() {
@@ -323,7 +330,7 @@
           </div>
           
           <div class="px-4 py-2 text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 border-b dark:border-gray-600">
-             ${mode === 'team' ? '👥 Team Mode' : '👤 Personal Mode'}
+             ${modeForced === 'team' ? '👥 Team Mode' : '👤 Personal Mode'}
           </div>
 
           <div class="p-3">
@@ -605,7 +612,7 @@
                      </div>
                    `;
                  }).join('')}
-                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-500">
+                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover=text-blue-500">
                     + Add Section
                  </button>
               </div>
@@ -626,7 +633,7 @@
       renderStatusIndicator(); lucide.createIcons();
     }
 
-    // ACTIONS (copy of your original, with console logs for debugging)
+    // ACTIONS with debug logging
     const actions = {
       toggleTheme: () => { state.darkMode = !state.darkMode; console.log("ACTION: toggleTheme ->", state.darkMode); renderApp(); api.triggerSave(); },
       setView: (view) => { state.currentView = view; console.log("ACTION: setView ->", view); renderApp(); api.triggerSave(); },
@@ -802,7 +809,7 @@
     };
     window.actions = actions;
 
-    // API object (save functions + load) with debug logs
+    // API object (load + save)
     const api = {
       saveTimer: null,
 
@@ -810,7 +817,6 @@
         console.log("API: load -> start");
         renderApp();
 
-        // Try secure load
         const result = await firebaseSecureLoad();
         console.log("API: firebaseSecureLoad result:", result);
 
@@ -818,7 +824,6 @@
           console.log("API: applyLoadedState from existing board");
           applyLoadedState(result.boardData);
         } else if (result.access === false && result.reason === "not_found") {
-          // create.
           const created = await initSecureDefaults();
           if (created && created.boardData) {
             console.log("API: created new secure board", created.boardId);
@@ -846,7 +851,6 @@
       },
 
       initSecureDefaults: async () => {
-        // kept for compatibility in case other code calls api.initSecureDefaults
         return await initSecureDefaults();
       },
 
@@ -901,6 +905,8 @@
             const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
             state.selectedProject = (proj && proj.id) || state.projects[0].id;
         }
+        // update debug board (if present)
+        dbg.setBoard(currentBoardId);
     }
 
     // Start the app
