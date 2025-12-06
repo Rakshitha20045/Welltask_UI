@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WellTask</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +12,9 @@
     tailwind.config = {
       darkMode: "class",
       theme: {
-        extend: { colors: { gray: { 750: "#2d3748" } } }
+        extend: {
+          colors: { gray: { 750: "#2d3748" } }
+        }
       }
     };
   </script>
@@ -22,43 +24,13 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
     .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
-    /* debug overlay */
-    #welltask-debug {
-      position: fixed;
-      right: 8px;
-      bottom: 8px;
-      z-index: 99999;
-      background: rgba(0,0,0,0.65);
-      color: #fff;
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      font-size: 12px;
-      padding: 8px 10px;
-      border-radius: 6px;
-      line-height: 1.2;
-      max-width: 320px;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-    }
   </style>
 
-  <!-- Firebase compat libs (same as your existing setup) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
-</head>
-
-<body class="bg-gray-50 text-gray-800 transition-colors duration-200">
-  <div id="app"></div>
-
-  <!-- debug overlay -->
-  <div id="welltask-debug" aria-hidden="true" style="display:none">
-    <div id="wt-d-mode">mode: -</div>
-    <div id="wt-d-channel">channelId: -</div>
-    <div id="wt-d-token">token: -</div>
-    <div id="wt-d-board">boardId: -</div>
-    <div id="wt-d-user">user: -</div>
-  </div>
 
   <script>
-    // ---------------- FIREBASE CONFIG (unchanged) ----------------
+    // ✅ FIREBASE CONFIGURATION
     const firebaseConfig = {
       apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
       authDomain: "welltask-8bbcf.firebaseapp.com",
@@ -71,221 +43,124 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    console.log("🔥 Firebase initialized (compat).");
+    console.log("🔥 Firebase initialized.");
   </script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 transition-colors duration-200">
+  <div id="app"></div>
 
   <script>
     // ======================================================
-    // 🔒 1. BOOTSTRAP / AUTHENTICATION WINDOW + PARAM DEBUGGING
+    // 🔒 1. SECURITY & AUTHENTICATION (THE WINDOW)
     // ======================================================
-    console.log("🚀 WellTask UI Boot");
-
+    
+    // Parse Secure Parameters from Zoho
     const urlParams = new URLSearchParams(window.location.search);
-    const tokenRawUrl = urlParams.get("token");
-    const modeRaw = (urlParams.get("mode") || "personal").toLowerCase();
-    const channelIdRaw = urlParams.get("channelId") || "";
+    const token = urlParams.get("token");
+    const mode = urlParams.get("mode") || "personal"; // "personal" or "team"
+    const channelId = urlParams.get("channelId");     // "123..." (Only present in team mode)
 
-    // show all params for debugging
-    console.group("FRONTEND DEBUG: URL params");
-    for (const [k,v] of urlParams.entries()) console.log(k, "=", v);
-    console.log("modeRaw:", modeRaw, "channelIdRaw:", channelIdRaw);
-    console.groupEnd();
-
-    // defensive resolution: if channelId present, force team mode
-    let modeForced = modeRaw;
-    if (channelIdRaw && channelIdRaw.trim() !== "") {
-      if (modeRaw !== "team") {
-        console.warn("FRONTEND DEBUG: channelId present but mode != 'team' -> forcing mode='team'");
-      }
-      modeForced = "team";
-    }
-
-    // debug overlay helpers
-    const dbgEl = document.getElementById("welltask-debug");
-    const dbg = {
-      setMode: (m) => { document.getElementById("wt-d-mode").innerText = "mode: " + m; dbgEl.style.display = "block"; },
-      setChannel: (c) => document.getElementById("wt-d-channel").innerText = "channelId: " + (c || "-"),
-      setToken: (t) => document.getElementById("wt-d-token").innerText = "token: " + (t ? t.substring(0,20) + "..." : "-"),
-      setBoard: (b) => document.getElementById("wt-d-board").innerText = "boardId: " + (b || "-"),
-      setUser: (u) => document.getElementById("wt-d-user").innerText = "user: " + (u || "-")
-    };
-    dbg.setMode(modeForced);
-    dbg.setChannel(channelIdRaw);
-    dbg.setToken(tokenRawUrl);
-
-    // parse identity token (base64 from widget)
     let currentUser = null;
-    try {
-      if (tokenRawUrl) {
-        const decoded = atob(tokenRawUrl);
-        console.log("FRONTEND DEBUG: decoded token raw ->", decoded);
+    let currentBoardId = null; 
+
+    // Decode Identity Token
+    if (token) {
+      try {
+        const decoded = atob(token);
         const parts = decoded.split("::");
         if (parts.length >= 3) {
-          currentUser = { email: parts[0], id: parts[1], name: parts[2], token_ts: parts[3] || null };
-          console.log("🔒 Identity Verified:", currentUser);
-          dbg.setUser(currentUser.email);
-        } else {
-          console.warn("FRONTEND DEBUG: token decoded but unexpected format:", parts);
+          currentUser = {
+            email: parts[0],
+            id: parts[1],
+            name: parts[2]
+          };
+          console.log("🔒 Identity Verified:", currentUser.email);
         }
-      } else {
-        console.warn("FRONTEND DEBUG: no token provided in URL");
+      } catch (e) {
+        console.error("Auth Token Error", e);
       }
-    } catch (e) {
-      console.error("FRONTEND DEBUG: error decoding token", e);
     }
 
-    // if no user -> Authentication window (block)
-    function showAuthFailure(msg) {
-      console.error("AUTH FAILURE:", msg);
-      document.body.innerHTML = `
-        <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans p-6">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mb-4 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 9v4" stroke-width="1.5"/><path d="M12 17h.01" stroke-width="1.5"/></svg>
-            <h1 class="text-2xl font-bold mb-2">Authentication Failed</h1>
-            <p class="text-gray-600 mb-2">${msg}</p>
-            <p class="text-sm text-gray-500">Open WellTask from within Zoho Cliq to continue.</p>
-        </div>`;
-      lucide.createIcons();
-      throw new Error("Authentication Failed: " + msg);
+    // BLOCK ACCESS if no identity (The "Authentication Window")
+    if (!currentUser) {
+        document.body.innerHTML = `
+            <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans">
+                <i data-lucide="shield-alert" class="w-16 h-16 mb-4 text-red-600"></i>
+                <h1 class="text-2xl font-bold mb-2">Authentication Failed</h1>
+                <p class="text-gray-600">Please open WellTask from within Zoho Cliq.</p>
+            </div>`;
+        lucide.createIcons();
+        throw new Error("No Identity");
     }
 
-    if (!currentUser || !currentUser.email) {
-      showAuthFailure("No valid identity token found. Please open from Zoho Cliq.");
-    }
-
-    // utility id generator
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
-    // persistent state variables used by debug overlay
-    let currentBoardId = null;
+    // ======================================================
+    // 💾 2. FIREBASE SECURE LOGIC
+    // ======================================================
 
-    // ======================================================
-    // 💾 2. FIRESTORE SECURE LOAD (PREFER channelId WHEN PRESENT)
-    // ======================================================
+    // QUERY: Find the board matching Identity + Context
     async function firebaseSecureLoad() {
-      console.log(`🔍 [SECURE LOAD] modeForced=${modeForced} | user=${currentUser.email} | channelId=${channelIdRaw}`);
-      try {
-        let q;
-        // Prefer channelId lookup when present (defensive)
-        if (channelIdRaw && channelIdRaw.trim() !== "") {
-          console.log("API DEBUG: channelId present -> searching by channel_id + board_type=team + allowed_users");
-          q = db.collection("boards")
-                .where("channel_id", "==", channelIdRaw)
-                .where("board_type", "==", "team")
-                .where("allowed_users", "array-contains", currentUser.email);
-        } else {
-          console.log("API DEBUG: no channelId -> searching personal boards owned/allowed for user");
-          q = db.collection("boards")
-                .where("board_type", "==", "personal")
-                .where("allowed_users", "array-contains", currentUser.email);
-        }
+        try {
+            console.log(`🔍 [DEBUG] Loading... Mode: ${mode} | Channel: ${channelId || 'N/A'}`);
+            
+            // SECURITY CHECK: Must be in 'allowed_users'
+            // This is the core fix for the "Board Identification Risk"
+            let q = db.collection("boards")
+                      .where("allowed_users", "array-contains", currentUser.email);
 
-        const snap = await q.get();
-        console.log("returned docs:", snap.size);
-        if (!snap.empty) {
-          let chosenDoc = null;
-          snap.forEach(doc => {
-            const data = doc.data();
-            console.log("DEBUG: candidate board:", doc.id, data.name, data.owner_email, data.channel_id);
-            if (channelIdRaw && channelIdRaw.trim() !== "") {
-              // team mode - first match is fine
-              if (!chosenDoc) chosenDoc = { id: doc.id, data };
+            // CONTEXT CHECK: Determine Personal vs Team
+            if (mode === "team" && channelId) {
+                console.log("👥 TEAM MODE DETECTED: Filtering by Channel ID");
+                q = q.where("channel_id", "==", channelId);
+                q = q.where("board_type", "==", "team");
             } else {
-              // personal mode - prefer owner match
-              if (data.owner_email === currentUser.email) {
-                chosenDoc = { id: doc.id, data };
-              }
+                console.log("👤 PERSONAL MODE DETECTED");
+                q = q.where("board_type", "==", "personal");
             }
-          });
 
-          if (!chosenDoc) {
-            console.warn("⚠️ Board(s) found but none owned by current user (personal). Denying access.");
-            return { access: false, reason: "found_board_not_owned" };
-          }
+            const snap = await q.get();
 
-          currentBoardId = chosenDoc.id;
-          console.log("✅ Secure Access Granted. Board ID (internal):", currentBoardId, "owner:", chosenDoc.data.owner_email);
-          dbg.setBoard(currentBoardId);
-          return { access: true, boardId: chosenDoc.id, boardData: chosenDoc.data };
-        } else {
-          console.log("⚠️ No board found for this context.");
-          return { access: false, reason: "not_found" };
+            if (!snap.empty) {
+                // ✅ Found it!
+                const doc = snap.docs[0];
+                console.log("✅ Secure Access Granted. Board ID:", doc.id);
+                currentBoardId = doc.id;
+                return doc.data();
+            } else {
+                // ⚠️ Not found.
+                console.log("⚠️ No board found. Triggering auto-creation.");
+                return null; 
+            }
+        } catch (e) {
+            console.error("💥 Query Error:", e);
+            if(e.message.includes("requires an index")) {
+                // VISIBLE ALERT FOR DEVELOPER
+                alert("DEV NOTE: You need to create a Firestore Index for this query. Open your Browser Console (F12) and click the link in the Red Error message.");
+            }
+            return null;
         }
-      } catch (e) {
-        console.error("💥 Query Error:", e);
-        if (e.message && e.message.includes("requires an index")) {
-          console.warn("DEV NOTE: Firestore requires an index for this query. Follow the Firestore console link.");
-        }
-        return { access: false, reason: "error", error: e };
-      }
     }
 
+    // SAVE: Update existing board
     async function firebaseSaveBoard(docId, payload) {
-      if (!docId) return;
-      console.log("DEBUG: saving board", docId);
-      try {
-        await db.collection("boards").doc(docId).set({
-          ...payload,
-          updatedAt: Date.now()
-        }, { merge: true });
-        console.log("DEBUG: board saved", docId);
-      } catch (e) {
-        console.error("Save Error:", e);
-      }
-    }
-
-    async function initSecureDefaults() {
-      console.log("🚀 Initializing new Secure Board (AUTO-CREATE)...");
-      const newDocId = uid();
-      currentBoardId = newDocId;
-
-      const wsId = uid(); const pId = uid();
-      const g1 = uid(); const g2 = uid(); const g3 = uid();
-
-      const defaultColumns = [
-        { id: "task", name: "Task", isDefault: true },
-        { id: "assignee", name: "Assignee", isDefault: true },
-        { id: "priority", name: "Priority", isDefault: true },
-        { id: "status", name: "Status", isDefault: true },
-        { id: "duedate", name: "Due Date", isDefault: true }
-      ];
-
-      const isTeam = (modeForced === "team");
-      const boardName = isTeam ? "Team Tasks" : "My Personal Tasks";
-      const wsName = isTeam ? "Team Workspace" : "My Workspace";
-
-      const payload = {
-        boardid: newDocId,
-        allowed_users: [currentUser.email],
-        board_type: modeForced,
-        channel_id: (isTeam ? channelIdRaw : null),
-        owner_email: currentUser.email,
-        owner_id: currentUser.id,
-
-        name: boardName,
-        darkMode: false,
-        currentView: "list",
-        workspaces: [{ id: wsId, name: wsName }],
-        projects: [{ id: pId, name: "General Project", color: "bg-blue-500", workspaceId: wsId }],
-        groups: [
-          { id: g1, name: "To Do", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g2, name: "In Progress", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g3, name: "Done", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) }
-        ],
-        tasks: []
-      };
-
-      await firebaseSaveBoard(newDocId, payload);
-      dbg.setBoard(newDocId);
-      return { created: true, boardId: newDocId, boardData: payload };
+        if (!docId) return;
+        try {
+            await db.collection("boards").doc(docId).set({ 
+                ...payload, 
+                updatedAt: Date.now() 
+            }, { merge: true });
+        } catch(e) { console.error("Save Error:", e); }
     }
 
     // ======================================================
-    // 🧠 3. APP STATE & UI (kept same as your original UI/logic)
+    // 🧠 3. STATE MANAGEMENT
     // ======================================================
     const initialState = {
       darkMode: false,
       currentUser,
-      isLoading: true,
+      isLoading: true, 
       saveStatus: "saved",
       currentView: "list",
       workspaces: [],
@@ -294,25 +169,317 @@
       selectedProject: null,
       groups: [],
       tasks: [],
-      ui: {
-        showNewTask: null, newTask: {}, columnsGroupId: null,
-        editingWorkspaceId: null, editingWorkspaceName: "",
+      ui: { 
+        showNewTask: null, newTask: {}, columnsGroupId: null, 
+        editingWorkspaceId: null, editingWorkspaceName: "", 
         editingProjectId: null, editingProjectName: "",
-        editingTaskId: null, editingGroupId: null, editingGroupName: "",
+        editingTaskId: null, editingGroupId: null, editingGroupName: "", 
         editingColumnGroupId: null, editingColumnId: null
       }
     };
 
     let state = { ...initialState };
 
-    // Basic helpers & UI rendering (kept same structure - with added console logs)
-    function priorityClass(p) { return p==="Critical"?"bg-red-100 text-red-800":p==="High"?"bg-orange-100 text-orange-800":p==="Medium"?"bg-yellow-100 text-yellow-800":p==="Low"?"bg-green-100 text-green-800":"bg-gray-100 text-gray-800"; }
+    // ======================================================
+    // ⚙️ 4. API & INITIALIZATION
+    // ======================================================
+    const api = {
+      saveTimer: null,
+      
+      // MAIN LOAD FUNCTION
+      load: async () => {
+        renderApp();
+        
+        // Try Secure Load
+        const fbData = await firebaseSecureLoad();
 
+        if (fbData) {
+            applyLoadedState(fbData);
+        } else {
+            // Auto-Create if missing (Replacing /createworkspace)
+            await api.initSecureDefaults();
+        }
+
+        state.isLoading = false;
+        renderApp();
+      },
+
+      // AUTO-CREATE SECURE BOARD (Handles Personal OR Team)
+      initSecureDefaults: async () => {
+        console.log("🚀 Initializing new Secure Board...");
+        const newDocId = uid(); 
+        currentBoardId = newDocId;
+
+        const wsId = uid(); const pId = uid(); 
+        const g1 = uid(); const g2 = uid(); const g3 = uid();
+        
+        const defaultColumns = [
+          { id: "task", name: "Task", isDefault: true },
+          { id: "assignee", name: "Assignee", isDefault: true },
+          { id: "priority", name: "Priority", isDefault: true },
+          { id: "status", name: "Status", isDefault: true },
+          { id: "duedate", name: "Due Date", isDefault: true }
+        ];
+
+        // Dynamic Names based on Mode
+        const isTeam = (mode === "team");
+        const boardName = isTeam ? "Team Tasks" : "My Personal Tasks";
+        const wsName = isTeam ? "Team Workspace" : "My Workspace";
+
+        // FOR TEAM BOARDS: Initially allow the creator.
+        // Important: You must use the /syncmembers command to add other team members to this list!
+        const initialAllowedUsers = [currentUser.email];
+
+        const payload = {
+            // 🔒 SECURITY FIELDS
+            boardid: newDocId,
+            allowed_users: initialAllowedUsers, 
+            board_type: mode, 
+            channel_id: channelId || null,
+            owner_email: currentUser.email,
+            name: boardName,
+
+            // DATA
+            darkMode: false,
+            currentView: "list",
+            workspaces: [{ id: wsId, name: wsName }],
+            projects: [{ id: pId, name: "General Project", color: "bg-blue-500", workspaceId: wsId }],
+            groups: [
+                { id: g1, name: "To Do", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
+                { id: g2, name: "In Progress", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
+                { id: g3, name: "Done", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) }
+            ],
+            tasks: []
+        };
+
+        await firebaseSaveBoard(newDocId, payload);
+        applyLoadedState(payload);
+      },
+
+      triggerSave: () => {
+        if (api.saveTimer) clearTimeout(api.saveTimer);
+        state.saveStatus = "pending";
+        renderStatusIndicator();
+        api.saveTimer = setTimeout(api.performSave, 1500);
+      },
+
+      performSave: async () => {
+        if (!currentBoardId) return;
+        try {
+          state.saveStatus = "saving";
+          renderStatusIndicator();
+          const payload = {
+            darkMode: state.darkMode,
+            currentView: state.currentView,
+            workspaces: state.workspaces,
+            projects: state.projects,
+            groups: state.groups,
+            tasks: state.tasks
+          };
+          await firebaseSaveBoard(currentBoardId, payload);
+          state.saveStatus = "saved";
+        } catch (e) {
+          state.saveStatus = "error";
+        } finally {
+          renderStatusIndicator();
+        }
+      }
+    };
+
+    function applyLoadedState(parsed) {
+        state.workspaces = parsed.workspaces || [];
+        state.projects = parsed.projects || [];
+        state.groups = parsed.groups || [];
+        state.tasks = parsed.tasks || [];
+        state.currentView = parsed.currentView || "list";
+        state.darkMode = !!parsed.darkMode;
+        
+        if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
+        if (state.projects.length > 0) {
+            const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
+            state.selectedProject = (proj && proj.id) || state.projects[0].id;
+        }
+    }
+
+    // ======================================================
+    // ⚡ 5. ACTIONS & UI HANDLERS (Standard)
+    // ======================================================
+    const actions = {
+      toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
+      setView: (view) => { state.currentView = view; renderApp(); api.triggerSave(); },
+      selectWorkspace: (id) => {
+        state.selectedWorkspace = id;
+        const proj = state.projects.find(p => p.workspaceId === id);
+        state.selectedProject = proj ? proj.id : null;
+        renderApp();
+      },
+      addWorkspace: () => {
+        const id = uid();
+        state.workspaces.push({ id, name: "New Workspace" });
+        state.selectedWorkspace = id;
+        renderApp(); api.triggerSave();
+      },
+      startEditWorkspace: (id) => {
+        const ws = state.workspaces.find(w => w.id === id);
+        if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
+      },
+      saveWorkspaceName: (id) => {
+        const input = document.getElementById(`ws-name-input-${id}`);
+        const ws = state.workspaces.find(w => w.id === id);
+        if (ws && input && input.value.trim()) { ws.name = input.value.trim(); api.triggerSave(); }
+        state.ui.editingWorkspaceId = null; renderApp();
+      },
+      deleteWorkspace: (id) => {
+        if(state.workspaces.length<=1) return alert("Keep at least one workspace.");
+        state.workspaces = state.workspaces.filter(w=>w.id !== id);
+        if(state.selectedWorkspace===id) state.selectedWorkspace = state.workspaces[0].id;
+        state.projects = state.projects.filter(p=>p.workspaceId!==id); 
+        renderApp(); api.triggerSave();
+      },
+      addProject: () => {
+        if(!state.selectedWorkspace) return;
+        const id = uid();
+        state.projects.push({ id, name: "New Project", color: "bg-green-500", workspaceId: state.selectedWorkspace });
+        state.selectedProject = id;
+        const g1 = uid();
+        state.groups.push({
+           id: g1, name: "To Do", projectId: id, collapsed: false, 
+           columns: [
+            { id: "task", name: "Task", isDefault: true },
+            { id: "assignee", name: "Assignee", isDefault: true },
+            { id: "priority", name: "Priority", isDefault: true },
+            { id: "status", name: "Status", isDefault: true },
+            { id: "duedate", name: "Due Date", isDefault: true }
+           ]
+        });
+        renderApp(); api.triggerSave();
+      },
+      selectProject: (id) => { state.selectedProject = id; renderApp(); },
+      startEditProject: (id) => {
+        const p = state.projects.find(pr => pr.id === id);
+        if (p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
+      },
+      saveProjectName: (id) => {
+        const input = document.getElementById(`proj-name-input-${id}`);
+        const p = state.projects.find(pr => pr.id === id);
+        if (p && input && input.value.trim()) { p.name = input.value.trim(); api.triggerSave(); }
+        state.ui.editingProjectId = null; renderApp();
+      },
+      deleteProject: (id) => {
+         if(!confirm("Delete Project?")) return;
+         state.projects = state.projects.filter(p=>p.id!==id);
+         state.groups = state.groups.filter(g=>g.projectId!==id);
+         state.tasks = state.tasks.filter(t=>t.projectId!==id);
+         state.selectedProject = state.projects[0]?.id || null;
+         renderApp(); api.triggerSave();
+      },
+      toggleGroupCollapse: (id) => {
+        const g = state.groups.find(gr => gr.id === id);
+        if (g) { g.collapsed = !g.collapsed; renderApp(); api.triggerSave(); }
+      },
+      addGroup: () => {
+        if(!state.selectedProject) return;
+        const base = state.groups.find(g=>g.projectId===state.selectedProject);
+        state.groups.push({
+          id: uid(), name: "New Group", projectId: state.selectedProject, collapsed: false,
+          columns: base ? JSON.parse(JSON.stringify(base.columns)) : []
+        });
+        renderApp(); api.triggerSave();
+      },
+      startEditGroup: (id) => {
+         const g = state.groups.find(gr=>gr.id===id);
+         if(g) { state.ui.editingGroupId=id; state.ui.editingGroupName=g.name; renderApp(); }
+      },
+      saveGroupName: (id) => {
+        const input = document.getElementById(`group-name-input-${id}`);
+        const g = state.groups.find(gr=>gr.id===id);
+        if(g && input && input.value.trim()) { g.name=input.value.trim(); api.triggerSave(); }
+        state.ui.editingGroupId=null; renderApp();
+      },
+      deleteGroup: (id) => {
+        if(!confirm("Delete group?")) return;
+        state.groups = state.groups.filter(g=>g.id!==id);
+        renderApp(); api.triggerSave();
+      },
+      toggleColumnsPanel: (gid) => {
+        state.ui.columnsGroupId = state.ui.columnsGroupId === gid ? null : gid;
+        renderApp();
+      },
+      addColumn: (gid) => {
+        const g = state.groups.find(gr=>gr.id===gid);
+        if(g) { g.columns.push({id:"col_"+uid(), name:"New Column", isDefault: false}); renderApp(); api.triggerSave(); }
+      },
+      deleteColumn: (gid, colId) => {
+        const g = state.groups.find(gr=>gr.id===gid);
+        if(g) { g.columns = g.columns.filter(c=>c.id!==colId); renderApp(); api.triggerSave(); }
+      },
+      startEditColumn: (gid, colId) => {
+        state.ui.editingColumnGroupId = gid;
+        state.ui.editingColumnId = colId;
+        renderApp();
+        setTimeout(() => {
+            const el = document.getElementById(`col-name-input-${gid}-${colId}`);
+            if(el) el.focus();
+        }, 50);
+      },
+      saveColumnName: (gid, colId) => {
+        const input = document.getElementById(`col-name-input-${gid}-${colId}`);
+        const g = state.groups.find(gr=>gr.id===gid);
+        if (g && input) {
+            const col = g.columns.find(c => c.id === colId);
+            if(col && input.value.trim()){
+                col.name = input.value.trim();
+                api.triggerSave();
+            }
+        }
+        state.ui.editingColumnGroupId = null;
+        state.ui.editingColumnId = null;
+        renderApp();
+      },
+      setShowNewTask: (gid) => {
+        state.ui.showNewTask = gid;
+        renderApp();
+      },
+      submitTask: (gid) => {
+        const input = document.getElementById(`new-task-name-${gid}`);
+        if(!input || !input.value.trim()) return;
+        state.tasks.push({
+          id: uid(), name: input.value.trim(), groupId: gid, projectId: state.selectedProject,
+          priority: "Medium", status: "Not Started", assignee: null, dueDate: "", customFields: {}
+        });
+        state.ui.showNewTask = null;
+        renderApp(); api.triggerSave();
+      },
+      startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 10); },
+      saveTaskName: (id) => {
+         const input = document.getElementById(`task-name-input-${id}`);
+         const t = state.tasks.find(task=>task.id===id);
+         if(t && input && input.value.trim()) { t.name = input.value.trim(); api.triggerSave(); }
+         state.ui.editingTaskId = null; renderApp();
+      },
+      updateTaskField: (id, field, val, extra) => {
+         const t = state.tasks.find(task=>task.id===id);
+         if(!t) return;
+         if(field === "assignee") t.assignee = val ? {name:val} : null;
+         else if(field === "custom") { if(!t.customFields) t.customFields={}; t.customFields[extra] = val; }
+         else t[field] = val;
+         renderApp(); api.triggerSave();
+      },
+      deleteTask: (id) => { state.tasks = state.tasks.filter(t=>t.id!==id); renderApp(); api.triggerSave(); }
+    };
+    window.actions = actions;
+
+    // ======================================================
+    // 🎨 6. RENDERING FUNCTIONS
+    // ======================================================
+    
+    function priorityClass(p) { return p==="Critical"?"bg-red-100 text-red-800":p==="High"?"bg-orange-100 text-orange-800":p==="Medium"?"bg-yellow-100 text-yellow-800":p==="Low"?"bg-green-100 text-green-800":"bg-gray-100 text-gray-800"; }
+    
     function renderStatusIndicator() {
       const el = document.getElementById("save-status"); if(!el) return;
       el.innerHTML = state.saveStatus==="saving" ? '<span class="text-blue-500">Saving...</span>' : state.saveStatus==="error" ? '<span class="text-red-500">Error</span>' : state.saveStatus==="pending" ? '...' : '<span class="text-green-500">Saved</span>';
     }
-
+    
     function renderSidebar() {
       const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspace);
       const wsProjects = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
@@ -330,7 +497,7 @@
           </div>
           
           <div class="px-4 py-2 text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 border-b dark:border-gray-600">
-             ${modeForced === 'team' ? '👥 Team Mode' : '👤 Personal Mode'}
+             ${mode === 'team' ? '👥 Team Mode' : '👤 Personal Mode'}
           </div>
 
           <div class="p-3">
@@ -541,7 +708,7 @@
                         </div>
                       ` : ''}
                    </div>
-                 `; 
+                 `;
              }).join('')}
              <button onclick="actions.addGroup()" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2">
                 <i data-lucide="plus" class="w-5 h-5"></i> Add New Group
@@ -612,7 +779,7 @@
                      </div>
                    `;
                  }).join('')}
-                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover=text-blue-500">
+                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-500">
                     + Add Section
                  </button>
               </div>
@@ -633,283 +800,6 @@
       renderStatusIndicator(); lucide.createIcons();
     }
 
-    // ACTIONS with debug logging
-    const actions = {
-      toggleTheme: () => { state.darkMode = !state.darkMode; console.log("ACTION: toggleTheme ->", state.darkMode); renderApp(); api.triggerSave(); },
-      setView: (view) => { state.currentView = view; console.log("ACTION: setView ->", view); renderApp(); api.triggerSave(); },
-      selectWorkspace: (id) => {
-        state.selectedWorkspace = id;
-        const proj = state.projects.find(p => p.workspaceId === id);
-        state.selectedProject = proj ? proj.id : null;
-        console.log("ACTION: selectWorkspace ->", id);
-        renderApp();
-      },
-      addWorkspace: () => {
-        const id = uid();
-        state.workspaces.push({ id, name: "New Workspace" });
-        state.selectedWorkspace = id;
-        console.log("ACTION: addWorkspace ->", id);
-        renderApp(); api.triggerSave();
-      },
-      startEditWorkspace: (id) => {
-        const ws = state.workspaces.find(w => w.id === id);
-        if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; console.log("ACTION: startEditWorkspace ->", id); renderApp(); }
-      },
-      saveWorkspaceName: (id) => {
-        const input = document.getElementById(`ws-name-input-${id}`);
-        const ws = state.workspaces.find(w => w.id === id);
-        if (ws && input && input.value.trim()) { ws.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingWorkspaceId = null; renderApp();
-      },
-      deleteWorkspace: (id) => {
-        if(state.workspaces.length<=1) return alert("Keep at least one workspace.");
-        state.workspaces = state.workspaces.filter(w=>w.id !== id);
-        if(state.selectedWorkspace===id) state.selectedWorkspace = state.workspaces[0].id;
-        state.projects = state.projects.filter(p=>p.workspaceId!==id);
-        console.log("ACTION: deleteWorkspace ->", id);
-        renderApp(); api.triggerSave();
-      },
-      addProject: () => {
-        if(!state.selectedWorkspace) return;
-        const id = uid();
-        state.projects.push({ id, name: "New Project", color: "bg-green-500", workspaceId: state.selectedWorkspace });
-        state.selectedProject = id;
-        const g1 = uid();
-        state.groups.push({
-           id: g1, name: "To Do", projectId: id, collapsed: false,
-           columns: [
-            { id: "task", name: "Task", isDefault: true },
-            { id: "assignee", name: "Assignee", isDefault: true },
-            { id: "priority", name: "Priority", isDefault: true },
-            { id: "status", name: "Status", isDefault: true },
-            { id: "duedate", name: "Due Date", isDefault: true }
-           ]
-        });
-        console.log("ACTION: addProject ->", id);
-        renderApp(); api.triggerSave();
-      },
-      selectProject: (id) => { state.selectedProject = id; console.log("ACTION: selectProject ->", id); renderApp(); },
-      startEditProject: (id) => {
-        const p = state.projects.find(pr => pr.id === id);
-        if (p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; console.log("ACTION: startEditProject ->", id); renderApp(); }
-      },
-      saveProjectName: (id) => {
-        const input = document.getElementById(`proj-name-input-${id}`);
-        const p = state.projects.find(pr => pr.id === id);
-        if (p && input && input.value.trim()) { p.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingProjectId = null; renderApp();
-      },
-      deleteProject: (id) => {
-         if(!confirm("Delete Project?")) return;
-         state.projects = state.projects.filter(p=>p.id!==id);
-         state.groups = state.groups.filter(g=>g.projectId!==id);
-         state.tasks = state.tasks.filter(t=>t.projectId!==id);
-         state.selectedProject = state.projects[0]?.id || null;
-         console.log("ACTION: deleteProject ->", id);
-         renderApp(); api.triggerSave();
-      },
-      toggleGroupCollapse: (id) => {
-        const g = state.groups.find(gr => gr.id === id);
-        if (g) { g.collapsed = !g.collapsed; console.log("ACTION: toggleGroupCollapse ->", id, g.collapsed); renderApp(); api.triggerSave(); }
-      },
-      addGroup: () => {
-        if(!state.selectedProject) return;
-        const base = state.groups.find(g=>g.projectId===state.selectedProject);
-        state.groups.push({
-          id: uid(), name: "New Group", projectId: state.selectedProject, collapsed: false,
-          columns: base ? JSON.parse(JSON.stringify(base.columns)) : []
-        });
-        console.log("ACTION: addGroup");
-        renderApp(); api.triggerSave();
-      },
-      startEditGroup: (id) => {
-         const g = state.groups.find(gr=>gr.id===id);
-         if(g) { state.ui.editingGroupId=id; state.ui.editingGroupName=g.name; console.log("ACTION: startEditGroup ->", id); renderApp(); }
-      },
-      saveGroupName: (id) => {
-        const input = document.getElementById(`group-name-input-${id}`);
-        const g = state.groups.find(gr=>gr.id===id);
-        if(g && input && input.value.trim()) { g.name=input.value.trim(); api.triggerSave(); }
-        state.ui.editingGroupId=null; renderApp();
-      },
-      deleteGroup: (id) => {
-        if(!confirm("Delete group?")) return;
-        state.groups = state.groups.filter(g=>g.id!==id);
-        console.log("ACTION: deleteGroup ->", id);
-        renderApp(); api.triggerSave();
-      },
-      toggleColumnsPanel: (gid) => {
-        state.ui.columnsGroupId = state.ui.columnsGroupId === gid ? null : gid;
-        renderApp();
-      },
-      addColumn: (gid) => {
-        const g = state.groups.find(gr=>gr.id===gid);
-        if(g) { g.columns.push({id:"col_"+uid(), name:"New Column", isDefault: false}); console.log("ACTION: addColumn ->", gid); renderApp(); api.triggerSave(); }
-      },
-      deleteColumn: (gid, colId) => {
-        const g = state.groups.find(gr=>gr.id===gid);
-        if(g) { g.columns = g.columns.filter(c=>c.id!==colId); console.log("ACTION: deleteColumn ->", gid, colId); renderApp(); api.triggerSave(); }
-      },
-      startEditColumn: (gid, colId) => {
-        state.ui.editingColumnGroupId = gid;
-        state.ui.editingColumnId = colId;
-        console.log("ACTION: startEditColumn ->", gid, colId);
-        renderApp();
-        setTimeout(() => {
-            const el = document.getElementById(`col-name-input-${gid}-${colId}`);
-            if(el) el.focus();
-        }, 50);
-      },
-      saveColumnName: (gid, colId) => {
-        const input = document.getElementById(`col-name-input-${gid}-${colId}`);
-        const g = state.groups.find(gr=>gr.id===gid);
-        if (g && input) {
-            const col = g.columns.find(c => c.id === colId);
-            if(col && input.value.trim()){
-                col.name = input.value.trim();
-                api.triggerSave();
-            }
-        }
-        state.ui.editingColumnGroupId = null;
-        state.ui.editingColumnId = null;
-        renderApp();
-      },
-      setShowNewTask: (gid) => {
-        state.ui.showNewTask = gid;
-        renderApp();
-      },
-      submitTask: (gid) => {
-        const input = document.getElementById(`new-task-name-${gid}`);
-        if(!input || !input.value.trim()) return;
-        state.tasks.push({
-          id: uid(), name: input.value.trim(), groupId: gid, projectId: state.selectedProject,
-          priority: "Medium", status: "Not Started", assignee: null, dueDate: "", customFields: {}
-        });
-        console.log("ACTION: submitTask ->", gid, input.value.trim());
-        state.ui.showNewTask = null;
-        renderApp(); api.triggerSave();
-      },
-      startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 10); },
-      saveTaskName: (id) => {
-         const input = document.getElementById(`task-name-input-${id}`);
-         const t = state.tasks.find(task=>task.id===id);
-         if(t && input && input.value.trim()) { t.name = input.value.trim(); api.triggerSave(); }
-         state.ui.editingTaskId = null; renderApp();
-      },
-      updateTaskField: (id, field, val, extra) => {
-         const t = state.tasks.find(task=>task.id===id);
-         if(!t) return;
-         if(field === "assignee") t.assignee = val ? {name:val} : null;
-         else if(field === "custom") { if(!t.customFields) t.customFields={}; t.customFields[extra] = val; }
-         else t[field] = val;
-         console.log("ACTION: updateTaskField ->", id, field, val, extra);
-         renderApp(); api.triggerSave();
-      },
-      deleteTask: (id) => { state.tasks = state.tasks.filter(t=>t.id!==id); console.log("ACTION: deleteTask ->", id); renderApp(); api.triggerSave(); }
-    };
-    window.actions = actions;
-
-    // API object (load + save)
-    const api = {
-      saveTimer: null,
-
-      load: async () => {
-        console.log("API: load -> start");
-        renderApp();
-
-        const result = await firebaseSecureLoad();
-        console.log("API: firebaseSecureLoad result:", result);
-
-        if (result.access === true && result.boardData) {
-          console.log("API: applyLoadedState from existing board");
-          applyLoadedState(result.boardData);
-        } else if (result.access === false && result.reason === "not_found") {
-          const created = await initSecureDefaults();
-          if (created && created.boardData) {
-            console.log("API: created new secure board", created.boardId);
-            applyLoadedState(created.boardData);
-          } else {
-            console.error("API: failed to create board", created);
-            showAuthFailure("Could not create a secure board. Check Firestore permissions.");
-          }
-        } else if (result.access === false && result.reason === "found_board_not_owned") {
-          showAuthFailure("A board was found for this context but you are not the owner. Access denied.");
-        } else if (result.access === false && result.reason === "missing_owner") {
-          showAuthFailure("Board configuration incorrect (missing owner). Please contact admin.");
-        } else {
-          console.warn("API: Unexpected load result, attempting to create board as fallback", result);
-          const created = await initSecureDefaults();
-          if (created && created.boardData) {
-            applyLoadedState(created.boardData);
-          } else {
-            showAuthFailure("Unable to initialize board.");
-          }
-        }
-
-        state.isLoading = false;
-        renderApp();
-      },
-
-      initSecureDefaults: async () => {
-        return await initSecureDefaults();
-      },
-
-      triggerSave: () => {
-        if (api.saveTimer) clearTimeout(api.saveTimer);
-        state.saveStatus = "pending";
-        renderStatusIndicator();
-        api.saveTimer = setTimeout(api.performSave, 1500);
-      },
-
-      performSave: async () => {
-        if (!currentBoardId) {
-          console.warn("API performSave: no currentBoardId - cannot save");
-          return;
-        }
-        try {
-          state.saveStatus = "saving";
-          renderStatusIndicator();
-          const payload = {
-            darkMode: state.darkMode,
-            currentView: state.currentView,
-            workspaces: state.workspaces,
-            projects: state.projects,
-            groups: state.groups,
-            tasks: state.tasks,
-            name: state.name || "WellTask Board"
-          };
-          console.log("API: performing save to board", currentBoardId, payload);
-          await firebaseSaveBoard(currentBoardId, payload);
-          state.saveStatus = "saved";
-          console.log("API: save complete");
-        } catch (e) {
-          state.saveStatus = "error";
-          console.error("API: save error", e);
-        } finally {
-          renderStatusIndicator();
-        }
-      }
-    };
-
-    function applyLoadedState(parsed) {
-        console.log("applyLoadedState ->", parsed);
-        state.workspaces = parsed.workspaces || [];
-        state.projects = parsed.projects || [];
-        state.groups = parsed.groups || [];
-        state.tasks = parsed.tasks || [];
-        state.currentView = parsed.currentView || "list";
-        state.darkMode = !!parsed.darkMode;
-
-        if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
-        if (state.projects.length > 0) {
-            const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
-            state.selectedProject = (proj && proj.id) || state.projects[0].id;
-        }
-        // update debug board (if present)
-        dbg.setBoard(currentBoardId);
-    }
-
-    // Start the app
     api.load();
   </script>
 </body>
