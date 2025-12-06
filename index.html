@@ -4,22 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WellTask</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+
   <script>
     tailwind.config = {
       darkMode: "class",
-      theme: { extend: { colors: { gray: { 750: "#2d3748" } } } }
+      theme: {
+        extend: {
+          colors: { gray: { 750: "#2d3748" } }
+        }
+      }
     };
   </script>
+
   <style>
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
     .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
   </style>
+
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+
   <script>
     // ✅ FIREBASE CONFIGURATION
     const firebaseConfig = {
@@ -31,6 +40,7 @@
       appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
       measurementId: "G-3HD74YPC52"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     console.log("🔥 Firebase initialized.");
@@ -42,15 +52,15 @@
 
   <script>
     // ======================================================
-    // 🔒 1. AUTHENTICATION WINDOW & CONTEXT
+    // 🔒 1. SECURITY & AUTHENTICATION
     // ======================================================
     
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    // Default to personal ONLY if mode is missing.
-    // The Zoho Script above ensures 'mode' is passed correctly now.
     const mode = urlParams.get("mode") || "personal"; 
-    const channelId = urlParams.get("channelId");     
+    // Handle empty channelId string from Zoho
+    const rawChannelId = urlParams.get("channelId");
+    const channelId = (rawChannelId && rawChannelId.trim() !== "") ? rawChannelId : null;
 
     let currentUser = null;
     let currentBoardId = null; 
@@ -61,19 +71,25 @@
         const decoded = atob(token);
         const parts = decoded.split("::");
         if (parts.length >= 3) {
-          currentUser = { email: parts[0], id: parts[1], name: parts[2] };
+          currentUser = {
+            email: parts[0],
+            id: parts[1],
+            name: parts[2]
+          };
           console.log("🔒 Identity Verified:", currentUser.email);
         }
-      } catch (e) { console.error("Auth Error:", e); }
+      } catch (e) {
+        console.error("Auth Token Error", e);
+      }
     }
 
-    // THE AUTHENTICATION WINDOW (Blocker)
+    // THE AUTHENTICATION WINDOW
     if (!currentUser) {
         document.body.innerHTML = `
             <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans">
                 <i data-lucide="shield-alert" class="w-16 h-16 mb-4 text-red-600"></i>
                 <h1 class="text-2xl font-bold mb-2">Authentication Failed</h1>
-                <p class="text-gray-600">Access Denied. Please open via Zoho Cliq.</p>
+                <p class="text-gray-600">Please open WellTask from within Zoho Cliq.</p>
             </div>`;
         lucide.createIcons();
         throw new Error("No Identity");
@@ -87,19 +103,19 @@
 
     async function firebaseSecureLoad() {
         try {
-            console.log(`🔍 [SECURE LOAD] Mode: ${mode} | Channel: ${channelId || 'None'}`);
+            console.log(`🔍 [SECURE LOAD] Mode: ${mode} | Channel: ${channelId || 'N/A'}`);
             
-            // SECURITY CHECK: Verify Ownership (allowed_users)
+            // SECURITY CHECK: Must be in 'allowed_users'
             let q = db.collection("boards")
                       .where("allowed_users", "array-contains", currentUser.email);
 
-            // CONTEXT CHECK: Personal vs Team
+            // CONTEXT CHECK
             if (mode === "team" && channelId) {
-                console.log("👥 TEAM MODE: Applying Channel Filter");
+                console.log("👥 TEAM MODE DETECTED");
                 q = q.where("channel_id", "==", channelId);
                 q = q.where("board_type", "==", "team");
             } else {
-                console.log("👤 PERSONAL MODE: Applying Personal Filter");
+                console.log("👤 PERSONAL MODE DETECTED");
                 q = q.where("board_type", "==", "personal");
             }
 
@@ -107,18 +123,18 @@
 
             if (!snap.empty) {
                 const doc = snap.docs[0];
-                console.log("✅ Board Found. ID:", doc.id);
+                console.log("✅ Secure Access Granted. Board ID:", doc.id);
                 currentBoardId = doc.id;
                 return doc.data();
             } else {
-                console.log("⚠️ No board found. Creating new one...");
+                console.log("⚠️ No board found. Triggering creation.");
                 return null; 
             }
         } catch (e) {
             console.error("💥 Query Error:", e);
             if(e.message.includes("requires an index")) {
-                // If you see this, CLICK THE LINK in your browser console (F12)
-                console.warn("⚠️ INDEX MISSING: Click the link above to fix!");
+                // ALERT for Personal Mode Index creation
+                alert("DEV NOTE: Open Console (F12) -> Click the Firebase Index Link!");
             }
             return null;
         }
@@ -138,8 +154,12 @@
     // 🧠 3. STATE & API
     // ======================================================
     const initialState = {
-      darkMode: false, currentUser, isLoading: true, saveStatus: "saved",
-      currentView: "list", workspaces: [], selectedWorkspace: null, projects: [],
+      darkMode: false,
+      currentUser,
+      isLoading: true, 
+      saveStatus: "saved",
+      currentView: "list",
+      workspaces: [], selectedWorkspace: null, projects: [],
       selectedProject: null, groups: [], tasks: [],
       ui: { showNewTask: null, newTask: {}, columnsGroupId: null, editingWorkspaceId: null, editingWorkspaceName: "", editingProjectId: null, editingProjectName: "", editingTaskId: null, editingGroupId: null, editingGroupName: "", editingColumnGroupId: null, editingColumnId: null }
     };
@@ -156,7 +176,7 @@
         if (fbData) {
             applyLoadedState(fbData);
         } else {
-            // Auto-Create Board if missing
+            // Auto-Create if missing
             await api.initSecureDefaults();
         }
 
@@ -179,8 +199,6 @@
 
         const payload = {
             boardid: newDocId,
-            // SECURITY: Add creator to allow list. 
-            // For Team boards, creators run /syncmembers later to add others.
             allowed_users: [currentUser.email], 
             board_type: mode, 
             channel_id: channelId || null,
@@ -264,18 +282,68 @@
     window.actions = actions;
 
     // ======================================================
-    // 🎨 6. RENDERING
+    // 🎨 6. RENDERING FUNCTIONS (MOVED TO GLOBAL SCOPE)
     // ======================================================
-    function priorityClass(p) { return p==="Critical"?"bg-red-100 text-red-800":p==="High"?"bg-orange-100 text-orange-800":p==="Medium"?"bg-yellow-100 text-yellow-800":p==="Low"?"bg-green-100 text-green-800":"bg-gray-100 text-gray-800"; }
+    
+    function priorityClass(p) { 
+        return p==="Critical"?"bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300":p==="High"?"bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300":p==="Medium"?"bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200":p==="Low"?"bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300":"bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200"; 
+    }
     
     function renderStatusIndicator() {
       const el = document.getElementById("save-status"); if(!el) return;
       el.innerHTML = state.saveStatus==="saving" ? '<span class="text-blue-500">Saving...</span>' : state.saveStatus==="error" ? '<span class="text-red-500">Error</span>' : state.saveStatus==="pending" ? '...' : '<span class="text-green-500">Saved</span>';
     }
+
+    // DEFINED GLOBALLY TO FIX REFERENCE ERROR
+    function renderCellForColumn(task, col) {
+      if (col.id === 'task') {
+        return state.ui.editingTaskId === task.id
+          ? `<input id="task-name-input-${task.id}" class="w-full bg-white dark:bg-gray-700 border border-blue-400 rounded px-2 py-1" value="${task.name}" onblur="actions.saveTaskName('${task.id}')" onkeydown="if(event.key==='Enter') actions.saveTaskName('${task.id}')" />`
+          : `<span class="cursor-text hover:text-blue-600 dark:hover:text-blue-400" onclick="actions.startEditTaskName('${task.id}')">${task.name}</span>`;
+      }
+      if (col.id === 'priority') {
+        const p = task.priority || 'Medium';
+        return `
+          <select onchange="actions.updateTaskField('${task.id}', 'priority', this.value)" 
+                  class="text-xs border-0 bg-transparent rounded px-1.5 py-0.5 cursor-pointer ${priorityClass(p)}">
+            <option value="Low" ${p==='Low'?'selected':''}>Low</option>
+            <option value="Medium" ${p==='Medium'?'selected':''}>Medium</option>
+            <option value="High" ${p==='High'?'selected':''}>High</option>
+            <option value="Critical" ${p==='Critical'?'selected':''}>Critical</option>
+          </select>`;
+      }
+      if (col.id === 'status') {
+         return `
+           <select onchange="actions.updateTaskField('${task.id}', 'status', this.value)" class="bg-transparent text-xs border border-gray-200 dark:border-gray-600 rounded px-1">
+             <option value="Not Started" ${task.status==='Not Started'?'selected':''}>Not Started</option>
+             <option value="In Progress" ${task.status==='In Progress'?'selected':''}>In Progress</option>
+             <option value="Done" ${task.status==='Done'?'selected':''}>Done</option>
+             <option value="Stuck" ${task.status==='Stuck'?'selected':''}>Stuck</option>
+           </select>
+         `;
+      }
+      if (col.id === 'assignee') {
+         return `<input type="text" placeholder="Unassigned" class="bg-transparent w-full text-xs focus:outline-none" value="${task.assignee?.name || ''}" onchange="actions.updateTaskField('${task.id}', 'assignee', this.value)" />`;
+      }
+      if (col.id === 'duedate') {
+         return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate||''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
+      }
+      const val = (task.customFields && task.customFields[col.id]) || "";
+      return `<input type="text" class="bg-transparent w-full text-xs focus:outline-none text-gray-600 dark:text-gray-300" value="${val}" onchange="actions.updateTaskField('${task.id}', 'custom', this.value, '${col.id}')" />`;
+    }
+
+    function renderColumnsPanel(group) {
+      return `
+        <div class="absolute right-0 top-6 w-48 bg-white dark:bg-gray-800 shadow-xl rounded-lg border dark:border-gray-700 z-10 p-2">
+           <div class="text-xs font-bold text-gray-500 mb-2">ADD COLUMNS</div>
+           <button onclick="actions.addColumn('${group.id}')" class="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-blue-500">+ Custom Text</button>
+        </div>
+      `;
+    }
     
     function renderSidebar() {
-      const ws = state.workspaces.find(w => w.id === state.selectedWorkspace);
-      const prjs = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
+      const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspace);
+      const wsProjects = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
       return `
         <div class="w-64 border-r dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col h-full">
           <div class="p-4 border-b flex justify-between dark:border-gray-700">
@@ -292,7 +360,7 @@
                 <div class="relative group">
                    ${state.ui.editingWorkspaceId === state.selectedWorkspace 
                      ? `<div class="flex items-center gap-1"><input id="ws-name-input-${state.selectedWorkspace}" class="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700" value="${state.ui.editingWorkspaceName}" /><button onclick="actions.saveWorkspaceName('${state.selectedWorkspace}')" class="text-green-600">✓</button></div>`
-                     : `<div class="flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer" onclick="actions.startEditWorkspace('${state.selectedWorkspace}')"><span>${ws?.name || 'Loading...'}</span></div>`
+                     : `<div class="flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer" onclick="actions.startEditWorkspace('${state.selectedWorkspace}')"><span>${activeWs?.name || 'Loading...'}</span></div>`
                    }
                 </div>
                 <div class="mt-2 space-y-1">
@@ -302,7 +370,7 @@
              </div>
              <div>
                 <div class="text-xs font-bold text-gray-400 mb-2 flex justify-between">PROJECTS <button onclick="actions.addProject()">+</button></div>
-                ${prjs.map(p => `
+                ${wsProjects.map(p => `
                    <div class="group flex justify-between p-2 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${p.id===state.selectedProject?'bg-blue-50 text-blue-600':''}" onclick="actions.selectProject('${p.id}')">
                       <div class="flex gap-2 truncate">
                          <span class="w-2 h-2 rounded-full ${p.color||'bg-gray-400'}"></span>
@@ -426,7 +494,11 @@
       renderStatusIndicator(); lucide.createIcons();
     }
 
+    // ======================================================
+    // 🚀 7. BOOT
+    // ======================================================
     api.load();
+
   </script>
 </body>
 </html>
