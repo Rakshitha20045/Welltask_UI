@@ -4,31 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WellTask</title>
-
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-
   <script>
     tailwind.config = {
       darkMode: "class",
-      theme: {
-        extend: {
-          colors: { gray: { 750: "#2d3748" } }
-        }
-      }
+      theme: { extend: { colors: { gray: { 750: "#2d3748" } } } }
     };
   </script>
-
   <style>
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
     .dark ::-webkit-scrollbar-thumb { background: #4a5568; }
   </style>
-
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
-
   <script>
     // ✅ FIREBASE CONFIGURATION
     const firebaseConfig = {
@@ -40,7 +31,6 @@
       appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
       measurementId: "G-3HD74YPC52"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     console.log("🔥 Firebase initialized.");
@@ -52,43 +42,38 @@
 
   <script>
     // ======================================================
-    // 🔒 1. SECURITY & AUTHENTICATION (THE WINDOW)
+    // 🔒 1. AUTHENTICATION WINDOW & CONTEXT
     // ======================================================
     
-    // Parse Secure Parameters from Zoho
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
-    const mode = urlParams.get("mode") || "personal"; // "personal" or "team"
-    const channelId = urlParams.get("channelId");     // "123..." (Only present in team mode)
+    // Default to personal ONLY if mode is missing.
+    // The Zoho Script above ensures 'mode' is passed correctly now.
+    const mode = urlParams.get("mode") || "personal"; 
+    const channelId = urlParams.get("channelId");     
 
     let currentUser = null;
     let currentBoardId = null; 
 
-    // Decode Identity Token
+    // Decode Token
     if (token) {
       try {
         const decoded = atob(token);
         const parts = decoded.split("::");
         if (parts.length >= 3) {
-          currentUser = {
-            email: parts[0],
-            id: parts[1],
-            name: parts[2]
-          };
+          currentUser = { email: parts[0], id: parts[1], name: parts[2] };
           console.log("🔒 Identity Verified:", currentUser.email);
         }
-      } catch (e) {
-        console.error("Auth Token Error", e);
-      }
+      } catch (e) { console.error("Auth Error:", e); }
     }
 
-    // BLOCK ACCESS if no identity (The "Authentication Window")
+    // THE AUTHENTICATION WINDOW (Blocker)
     if (!currentUser) {
         document.body.innerHTML = `
             <div class="h-screen flex flex-col items-center justify-center bg-red-50 text-red-900 font-sans">
                 <i data-lucide="shield-alert" class="w-16 h-16 mb-4 text-red-600"></i>
                 <h1 class="text-2xl font-bold mb-2">Authentication Failed</h1>
-                <p class="text-gray-600">Please open WellTask from within Zoho Cliq.</p>
+                <p class="text-gray-600">Access Denied. Please open via Zoho Cliq.</p>
             </div>`;
         lucide.createIcons();
         throw new Error("No Identity");
@@ -97,53 +82,48 @@
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
     // ======================================================
-    // 💾 2. FIREBASE SECURE LOGIC
+    // 💾 2. SECURE FIREBASE LOGIC
     // ======================================================
 
-    // QUERY: Find the board matching Identity + Context
     async function firebaseSecureLoad() {
         try {
-            console.log(`🔍 [DEBUG] Loading... Mode: ${mode} | Channel: ${channelId || 'N/A'}`);
+            console.log(`🔍 [SECURE LOAD] Mode: ${mode} | Channel: ${channelId || 'None'}`);
             
-            // SECURITY CHECK: Must be in 'allowed_users'
-            // This is the core fix for the "Board Identification Risk"
+            // SECURITY CHECK: Verify Ownership (allowed_users)
             let q = db.collection("boards")
                       .where("allowed_users", "array-contains", currentUser.email);
 
-            // CONTEXT CHECK: Determine Personal vs Team
+            // CONTEXT CHECK: Personal vs Team
             if (mode === "team" && channelId) {
-                console.log("👥 TEAM MODE DETECTED: Filtering by Channel ID");
+                console.log("👥 TEAM MODE: Applying Channel Filter");
                 q = q.where("channel_id", "==", channelId);
                 q = q.where("board_type", "==", "team");
             } else {
-                console.log("👤 PERSONAL MODE DETECTED");
+                console.log("👤 PERSONAL MODE: Applying Personal Filter");
                 q = q.where("board_type", "==", "personal");
             }
 
             const snap = await q.get();
 
             if (!snap.empty) {
-                // ✅ Found it!
                 const doc = snap.docs[0];
-                console.log("✅ Secure Access Granted. Board ID:", doc.id);
+                console.log("✅ Board Found. ID:", doc.id);
                 currentBoardId = doc.id;
                 return doc.data();
             } else {
-                // ⚠️ Not found.
-                console.log("⚠️ No board found. Triggering auto-creation.");
+                console.log("⚠️ No board found. Creating new one...");
                 return null; 
             }
         } catch (e) {
             console.error("💥 Query Error:", e);
             if(e.message.includes("requires an index")) {
-                // VISIBLE ALERT FOR DEVELOPER
-                alert("DEV NOTE: You need to create a Firestore Index for this query. Open your Browser Console (F12) and click the link in the Red Error message.");
+                // If you see this, CLICK THE LINK in your browser console (F12)
+                console.warn("⚠️ INDEX MISSING: Click the link above to fix!");
             }
             return null;
         }
     }
 
-    // SAVE: Update existing board
     async function firebaseSaveBoard(docId, payload) {
         if (!docId) return;
         try {
@@ -155,48 +135,28 @@
     }
 
     // ======================================================
-    // 🧠 3. STATE MANAGEMENT
+    // 🧠 3. STATE & API
     // ======================================================
     const initialState = {
-      darkMode: false,
-      currentUser,
-      isLoading: true, 
-      saveStatus: "saved",
-      currentView: "list",
-      workspaces: [],
-      selectedWorkspace: null,
-      projects: [],
-      selectedProject: null,
-      groups: [],
-      tasks: [],
-      ui: { 
-        showNewTask: null, newTask: {}, columnsGroupId: null, 
-        editingWorkspaceId: null, editingWorkspaceName: "", 
-        editingProjectId: null, editingProjectName: "",
-        editingTaskId: null, editingGroupId: null, editingGroupName: "", 
-        editingColumnGroupId: null, editingColumnId: null
-      }
+      darkMode: false, currentUser, isLoading: true, saveStatus: "saved",
+      currentView: "list", workspaces: [], selectedWorkspace: null, projects: [],
+      selectedProject: null, groups: [], tasks: [],
+      ui: { showNewTask: null, newTask: {}, columnsGroupId: null, editingWorkspaceId: null, editingWorkspaceName: "", editingProjectId: null, editingProjectName: "", editingTaskId: null, editingGroupId: null, editingGroupName: "", editingColumnGroupId: null, editingColumnId: null }
     };
 
     let state = { ...initialState };
 
-    // ======================================================
-    // ⚙️ 4. API & INITIALIZATION
-    // ======================================================
     const api = {
       saveTimer: null,
       
-      // MAIN LOAD FUNCTION
       load: async () => {
         renderApp();
-        
-        // Try Secure Load
         const fbData = await firebaseSecureLoad();
 
         if (fbData) {
             applyLoadedState(fbData);
         } else {
-            // Auto-Create if missing (Replacing /createworkspace)
+            // Auto-Create Board if missing
             await api.initSecureDefaults();
         }
 
@@ -204,7 +164,6 @@
         renderApp();
       },
 
-      // AUTO-CREATE SECURE BOARD (Handles Personal OR Team)
       initSecureDefaults: async () => {
         console.log("🚀 Initializing new Secure Board...");
         const newDocId = uid(); 
@@ -212,36 +171,22 @@
 
         const wsId = uid(); const pId = uid(); 
         const g1 = uid(); const g2 = uid(); const g3 = uid();
-        
-        const defaultColumns = [
-          { id: "task", name: "Task", isDefault: true },
-          { id: "assignee", name: "Assignee", isDefault: true },
-          { id: "priority", name: "Priority", isDefault: true },
-          { id: "status", name: "Status", isDefault: true },
-          { id: "duedate", name: "Due Date", isDefault: true }
-        ];
+        const defaultColumns = [{id:"task",name:"Task",isDefault:true},{id:"assignee",name:"Assignee",isDefault:true},{id:"priority",name:"Priority",isDefault:true},{id:"status",name:"Status",isDefault:true},{id:"duedate",name:"Due Date",isDefault:true}];
 
-        // Dynamic Names based on Mode
         const isTeam = (mode === "team");
         const boardName = isTeam ? "Team Tasks" : "My Personal Tasks";
         const wsName = isTeam ? "Team Workspace" : "My Workspace";
 
-        // FOR TEAM BOARDS: Initially allow the creator.
-        // Important: You must use the /syncmembers command to add other team members to this list!
-        const initialAllowedUsers = [currentUser.email];
-
         const payload = {
-            // 🔒 SECURITY FIELDS
             boardid: newDocId,
-            allowed_users: initialAllowedUsers, 
+            // SECURITY: Add creator to allow list. 
+            // For Team boards, creators run /syncmembers later to add others.
+            allowed_users: [currentUser.email], 
             board_type: mode, 
             channel_id: channelId || null,
             owner_email: currentUser.email,
             name: boardName,
-
-            // DATA
-            darkMode: false,
-            currentView: "list",
+            darkMode: false, currentView: "list",
             workspaces: [{ id: wsId, name: wsName }],
             projects: [{ id: pId, name: "General Project", color: "bg-blue-500", workspaceId: wsId }],
             groups: [
@@ -268,211 +213,59 @@
         try {
           state.saveStatus = "saving";
           renderStatusIndicator();
-          const payload = {
-            darkMode: state.darkMode,
-            currentView: state.currentView,
-            workspaces: state.workspaces,
-            projects: state.projects,
-            groups: state.groups,
-            tasks: state.tasks
-          };
+          const payload = { darkMode: state.darkMode, currentView: state.currentView, workspaces: state.workspaces, projects: state.projects, groups: state.groups, tasks: state.tasks };
           await firebaseSaveBoard(currentBoardId, payload);
           state.saveStatus = "saved";
-        } catch (e) {
-          state.saveStatus = "error";
-        } finally {
-          renderStatusIndicator();
-        }
+        } catch (e) { state.saveStatus = "error"; } finally { renderStatusIndicator(); }
       }
     };
 
     function applyLoadedState(parsed) {
-        state.workspaces = parsed.workspaces || [];
-        state.projects = parsed.projects || [];
-        state.groups = parsed.groups || [];
-        state.tasks = parsed.tasks || [];
-        state.currentView = parsed.currentView || "list";
-        state.darkMode = !!parsed.darkMode;
-        
+        state.workspaces = parsed.workspaces || []; state.projects = parsed.projects || [];
+        state.groups = parsed.groups || []; state.tasks = parsed.tasks || [];
+        state.currentView = parsed.currentView || "list"; state.darkMode = !!parsed.darkMode;
         if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
-        if (state.projects.length > 0) {
-            const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
-            state.selectedProject = (proj && proj.id) || state.projects[0].id;
-        }
+        if (state.projects.length > 0) { const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace); state.selectedProject = (proj && proj.id) || state.projects[0].id; }
     }
 
     // ======================================================
-    // ⚡ 5. ACTIONS & UI HANDLERS (Standard)
+    // ⚡ 5. ACTIONS
     // ======================================================
     const actions = {
       toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
       setView: (view) => { state.currentView = view; renderApp(); api.triggerSave(); },
-      selectWorkspace: (id) => {
-        state.selectedWorkspace = id;
-        const proj = state.projects.find(p => p.workspaceId === id);
-        state.selectedProject = proj ? proj.id : null;
-        renderApp();
-      },
-      addWorkspace: () => {
-        const id = uid();
-        state.workspaces.push({ id, name: "New Workspace" });
-        state.selectedWorkspace = id;
-        renderApp(); api.triggerSave();
-      },
-      startEditWorkspace: (id) => {
-        const ws = state.workspaces.find(w => w.id === id);
-        if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
-      },
-      saveWorkspaceName: (id) => {
-        const input = document.getElementById(`ws-name-input-${id}`);
-        const ws = state.workspaces.find(w => w.id === id);
-        if (ws && input && input.value.trim()) { ws.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingWorkspaceId = null; renderApp();
-      },
-      deleteWorkspace: (id) => {
-        if(state.workspaces.length<=1) return alert("Keep at least one workspace.");
-        state.workspaces = state.workspaces.filter(w=>w.id !== id);
-        if(state.selectedWorkspace===id) state.selectedWorkspace = state.workspaces[0].id;
-        state.projects = state.projects.filter(p=>p.workspaceId!==id); 
-        renderApp(); api.triggerSave();
-      },
-      addProject: () => {
-        if(!state.selectedWorkspace) return;
-        const id = uid();
-        state.projects.push({ id, name: "New Project", color: "bg-green-500", workspaceId: state.selectedWorkspace });
-        state.selectedProject = id;
-        const g1 = uid();
-        state.groups.push({
-           id: g1, name: "To Do", projectId: id, collapsed: false, 
-           columns: [
-            { id: "task", name: "Task", isDefault: true },
-            { id: "assignee", name: "Assignee", isDefault: true },
-            { id: "priority", name: "Priority", isDefault: true },
-            { id: "status", name: "Status", isDefault: true },
-            { id: "duedate", name: "Due Date", isDefault: true }
-           ]
-        });
-        renderApp(); api.triggerSave();
-      },
-      selectProject: (id) => { state.selectedProject = id; renderApp(); },
-      startEditProject: (id) => {
-        const p = state.projects.find(pr => pr.id === id);
-        if (p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
-      },
-      saveProjectName: (id) => {
-        const input = document.getElementById(`proj-name-input-${id}`);
-        const p = state.projects.find(pr => pr.id === id);
-        if (p && input && input.value.trim()) { p.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingProjectId = null; renderApp();
-      },
-      deleteProject: (id) => {
-         if(!confirm("Delete Project?")) return;
-         state.projects = state.projects.filter(p=>p.id!==id);
-         state.groups = state.groups.filter(g=>g.projectId!==id);
-         state.tasks = state.tasks.filter(t=>t.projectId!==id);
-         state.selectedProject = state.projects[0]?.id || null;
-         renderApp(); api.triggerSave();
-      },
-      toggleGroupCollapse: (id) => {
-        const g = state.groups.find(gr => gr.id === id);
-        if (g) { g.collapsed = !g.collapsed; renderApp(); api.triggerSave(); }
-      },
-      addGroup: () => {
-        if(!state.selectedProject) return;
-        const base = state.groups.find(g=>g.projectId===state.selectedProject);
-        state.groups.push({
-          id: uid(), name: "New Group", projectId: state.selectedProject, collapsed: false,
-          columns: base ? JSON.parse(JSON.stringify(base.columns)) : []
-        });
-        renderApp(); api.triggerSave();
-      },
-      startEditGroup: (id) => {
-         const g = state.groups.find(gr=>gr.id===id);
-         if(g) { state.ui.editingGroupId=id; state.ui.editingGroupName=g.name; renderApp(); }
-      },
-      saveGroupName: (id) => {
-        const input = document.getElementById(`group-name-input-${id}`);
-        const g = state.groups.find(gr=>gr.id===id);
-        if(g && input && input.value.trim()) { g.name=input.value.trim(); api.triggerSave(); }
-        state.ui.editingGroupId=null; renderApp();
-      },
-      deleteGroup: (id) => {
-        if(!confirm("Delete group?")) return;
-        state.groups = state.groups.filter(g=>g.id!==id);
-        renderApp(); api.triggerSave();
-      },
-      toggleColumnsPanel: (gid) => {
-        state.ui.columnsGroupId = state.ui.columnsGroupId === gid ? null : gid;
-        renderApp();
-      },
-      addColumn: (gid) => {
-        const g = state.groups.find(gr=>gr.id===gid);
-        if(g) { g.columns.push({id:"col_"+uid(), name:"New Column", isDefault: false}); renderApp(); api.triggerSave(); }
-      },
-      deleteColumn: (gid, colId) => {
-        const g = state.groups.find(gr=>gr.id===gid);
-        if(g) { g.columns = g.columns.filter(c=>c.id!==colId); renderApp(); api.triggerSave(); }
-      },
-      startEditColumn: (gid, colId) => {
-        state.ui.editingColumnGroupId = gid;
-        state.ui.editingColumnId = colId;
-        renderApp();
-        setTimeout(() => {
-            const el = document.getElementById(`col-name-input-${gid}-${colId}`);
-            if(el) el.focus();
-        }, 50);
-      },
-      saveColumnName: (gid, colId) => {
-        const input = document.getElementById(`col-name-input-${gid}-${colId}`);
-        const g = state.groups.find(gr=>gr.id===gid);
-        if (g && input) {
-            const col = g.columns.find(c => c.id === colId);
-            if(col && input.value.trim()){
-                col.name = input.value.trim();
-                api.triggerSave();
-            }
-        }
-        state.ui.editingColumnGroupId = null;
-        state.ui.editingColumnId = null;
-        renderApp();
-      },
-      setShowNewTask: (gid) => {
-        state.ui.showNewTask = gid;
-        renderApp();
-      },
-      submitTask: (gid) => {
-        const input = document.getElementById(`new-task-name-${gid}`);
-        if(!input || !input.value.trim()) return;
-        state.tasks.push({
-          id: uid(), name: input.value.trim(), groupId: gid, projectId: state.selectedProject,
-          priority: "Medium", status: "Not Started", assignee: null, dueDate: "", customFields: {}
-        });
-        state.ui.showNewTask = null;
-        renderApp(); api.triggerSave();
-      },
-      startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(()=>document.getElementById(`task-name-input-${id}`)?.focus(), 10); },
-      saveTaskName: (id) => {
-         const input = document.getElementById(`task-name-input-${id}`);
-         const t = state.tasks.find(task=>task.id===id);
-         if(t && input && input.value.trim()) { t.name = input.value.trim(); api.triggerSave(); }
-         state.ui.editingTaskId = null; renderApp();
-      },
-      updateTaskField: (id, field, val, extra) => {
-         const t = state.tasks.find(task=>task.id===id);
-         if(!t) return;
-         if(field === "assignee") t.assignee = val ? {name:val} : null;
-         else if(field === "custom") { if(!t.customFields) t.customFields={}; t.customFields[extra] = val; }
-         else t[field] = val;
-         renderApp(); api.triggerSave();
-      },
-      deleteTask: (id) => { state.tasks = state.tasks.filter(t=>t.id!==id); renderApp(); api.triggerSave(); }
+      selectWorkspace: (id) => { state.selectedWorkspace = id; const p = state.projects.find(x=>x.workspaceId===id); state.selectedProject = p?p.id:null; renderApp(); },
+      addWorkspace: () => { const id=uid(); state.workspaces.push({id,name:"New Workspace"}); state.selectedWorkspace=id; renderApp(); api.triggerSave(); },
+      startEditWorkspace: (id) => { const w=state.workspaces.find(x=>x.id===id); if(w){ state.ui.editingWorkspaceId=id; state.ui.editingWorkspaceName=w.name; renderApp(); } },
+      saveWorkspaceName: (id) => { const el=document.getElementById(`ws-name-input-${id}`); const w=state.workspaces.find(x=>x.id===id); if(w&&el){ w.name=el.value; api.triggerSave(); } state.ui.editingWorkspaceId=null; renderApp(); },
+      deleteWorkspace: (id) => { if(state.workspaces.length<=1)return alert("Keep at least one workspace."); state.workspaces=state.workspaces.filter(x=>x.id!==id); if(state.selectedWorkspace===id)state.selectedWorkspace=state.workspaces[0].id; state.projects=state.projects.filter(x=>x.workspaceId!==id); renderApp(); api.triggerSave(); },
+      addProject: () => { if(!state.selectedWorkspace)return; const id=uid(); state.projects.push({id,name:"New Project",color:"bg-green-500",workspaceId:state.selectedWorkspace}); state.selectedProject=id; const g1=uid(); state.groups.push({id:g1,name:"To Do",projectId:id,collapsed:false,columns:[{id:"task",name:"Task",isDefault:true},{id:"assignee",name:"Assignee",isDefault:true},{id:"priority",name:"Priority",isDefault:true},{id:"status",name:"Status",isDefault:true},{id:"duedate",name:"Due Date",isDefault:true}]}); renderApp(); api.triggerSave(); },
+      selectProject: (id) => { state.selectedProject=id; renderApp(); },
+      startEditProject: (id) => { const p=state.projects.find(x=>x.id===id); if(p){ state.ui.editingProjectId=id; state.ui.editingProjectName=p.name; renderApp(); } },
+      saveProjectName: (id) => { const el=document.getElementById(`proj-name-input-${id}`); const p=state.projects.find(x=>x.id===id); if(p&&el){ p.name=el.value; api.triggerSave(); } state.ui.editingProjectId=null; renderApp(); },
+      deleteProject: (id) => { if(!confirm("Delete Project?"))return; state.projects=state.projects.filter(x=>x.id!==id); state.groups=state.groups.filter(x=>x.projectId!==id); state.tasks=state.tasks.filter(x=>x.projectId!==id); state.selectedProject=state.projects[0]?.id||null; renderApp(); api.triggerSave(); },
+      toggleGroupCollapse: (id) => { const g=state.groups.find(x=>x.id===id); if(g){ g.collapsed=!g.collapsed; renderApp(); api.triggerSave(); } },
+      addGroup: () => { if(!state.selectedProject)return; const base=state.groups.find(x=>x.projectId===state.selectedProject); state.groups.push({id:uid(),name:"New Group",projectId:state.selectedProject,collapsed:false,columns:base?JSON.parse(JSON.stringify(base.columns)):[]}); renderApp(); api.triggerSave(); },
+      startEditGroup: (id) => { const g=state.groups.find(x=>x.id===id); if(g){ state.ui.editingGroupId=id; state.ui.editingGroupName=g.name; renderApp(); } },
+      saveGroupName: (id) => { const el=document.getElementById(`group-name-input-${id}`); const g=state.groups.find(x=>x.id===id); if(g&&el){ g.name=el.value; api.triggerSave(); } state.ui.editingGroupId=null; renderApp(); },
+      deleteGroup: (id) => { if(!confirm("Delete group?"))return; state.groups=state.groups.filter(x=>x.id!==id); renderApp(); api.triggerSave(); },
+      toggleColumnsPanel: (id) => { state.ui.columnsGroupId=state.ui.columnsGroupId===id?null:id; renderApp(); },
+      addColumn: (gid) => { const g=state.groups.find(x=>x.id===gid); if(g){ g.columns.push({id:"col_"+uid(),name:"New Column",isDefault:false}); renderApp(); api.triggerSave(); } },
+      deleteColumn: (gid,cid) => { const g=state.groups.find(x=>x.id===gid); if(g){ g.columns=g.columns.filter(x=>x.id!==cid); renderApp(); api.triggerSave(); } },
+      startEditColumn: (gid,cid) => { state.ui.editingColumnGroupId=gid; state.ui.editingColumnId=cid; renderApp(); setTimeout(()=>{document.getElementById(`col-name-input-${gid}-${cid}`)?.focus()},50); },
+      saveColumnName: (gid,cid) => { const el=document.getElementById(`col-name-input-${gid}-${cid}`); const g=state.groups.find(x=>x.id===gid); if(g&&el){ const c=g.columns.find(x=>x.id===cid); if(c){ c.name=el.value; api.triggerSave(); } } state.ui.editingColumnGroupId=null; state.ui.editingColumnId=null; renderApp(); },
+      setShowNewTask: (gid) => { state.ui.showNewTask=gid; renderApp(); },
+      submitTask: (gid) => { const el=document.getElementById(`new-task-name-${gid}`); if(!el||!el.value.trim())return; state.tasks.push({id:uid(),name:el.value.trim(),groupId:gid,projectId:state.selectedProject,priority:"Medium",status:"Not Started",assignee:null,dueDate:"",customFields:{}}); state.ui.showNewTask=null; renderApp(); api.triggerSave(); },
+      startEditTaskName: (id) => { state.ui.editingTaskId=id; renderApp(); setTimeout(()=>{document.getElementById(`task-name-input-${id}`)?.focus()},10); },
+      saveTaskName: (id) => { const el=document.getElementById(`task-name-input-${id}`); const t=state.tasks.find(x=>x.id===id); if(t&&el){ t.name=el.value.trim(); api.triggerSave(); } state.ui.editingTaskId=null; renderApp(); },
+      updateTaskField: (id,f,v,ex) => { const t=state.tasks.find(x=>x.id===id); if(!t)return; if(f==="assignee")t.assignee=v?{name:v}:null; else if(f==="custom"){if(!t.customFields)t.customFields={};t.customFields[ex]=v;} else t[f]=v; renderApp(); api.triggerSave(); },
+      deleteTask: (id) => { state.tasks=state.tasks.filter(x=>x.id!==id); renderApp(); api.triggerSave(); }
     };
     window.actions = actions;
 
     // ======================================================
-    // 🎨 6. RENDERING FUNCTIONS
+    // 🎨 6. RENDERING
     // ======================================================
-    
     function priorityClass(p) { return p==="Critical"?"bg-red-100 text-red-800":p==="High"?"bg-orange-100 text-orange-800":p==="Medium"?"bg-yellow-100 text-yellow-800":p==="Low"?"bg-green-100 text-green-800":"bg-gray-100 text-gray-800"; }
     
     function renderStatusIndicator() {
@@ -481,311 +274,144 @@
     }
     
     function renderSidebar() {
-      const activeWs = state.workspaces.find(w => w.id === state.selectedWorkspace);
-      const wsProjects = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
-
+      const ws = state.workspaces.find(w => w.id === state.selectedWorkspace);
+      const prjs = state.projects.filter(p => p.workspaceId === state.selectedWorkspace);
       return `
-        <div class="w-64 border-r dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col h-full flex-shrink-0">
-          <div class="p-4 border-b dark:border-gray-700 flex items-center justify-between">
-             <div class="flex items-center gap-2 font-bold text-gray-700 dark:text-gray-100">
-               <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                 <i data-lucide="check-square" class="w-5 h-5"></i>
-               </div>
-               WellTask
-             </div>
+        <div class="w-64 border-r dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col h-full">
+          <div class="p-4 border-b flex justify-between dark:border-gray-700">
+             <div class="font-bold text-gray-700 dark:text-gray-100">WellTask</div>
              <div id="save-status" class="text-xs"></div>
           </div>
-          
           <div class="px-4 py-2 text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 border-b dark:border-gray-600">
              ${mode === 'team' ? '👥 Team Mode' : '👤 Personal Mode'}
           </div>
 
-          <div class="p-3">
-             <div class="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Workspace</div>
-             <div class="relative group">
-                ${state.ui.editingWorkspaceId === state.selectedWorkspace 
-                  ? `<div class="flex items-center gap-1">
-                       <input id="ws-name-input-${state.selectedWorkspace}" class="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700 dark:text-white" value="${state.ui.editingWorkspaceName}" />
-                       <button onclick="actions.saveWorkspaceName('${state.selectedWorkspace}')" class="p-1 text-green-600"><i data-lucide="check" class="w-4 h-4"></i></button>
-                     </div>`
-                  : `<div class="flex items-center justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded cursor-pointer" onclick="actions.startEditWorkspace('${state.selectedWorkspace}')">
-                       <span class="truncate font-medium dark:text-gray-200">${activeWs ? activeWs.name : 'Select...'}</span>
-                       <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500"></i>
-                     </div>`
-                }
+          <div class="p-3 flex-1 overflow-y-auto">
+             <div class="mb-4">
+                <div class="text-xs font-bold text-gray-400 mb-2">WORKSPACE</div>
+                <div class="relative group">
+                   ${state.ui.editingWorkspaceId === state.selectedWorkspace 
+                     ? `<div class="flex items-center gap-1"><input id="ws-name-input-${state.selectedWorkspace}" class="w-full px-2 py-1 text-sm border rounded dark:bg-gray-700" value="${state.ui.editingWorkspaceName}" /><button onclick="actions.saveWorkspaceName('${state.selectedWorkspace}')" class="text-green-600">✓</button></div>`
+                     : `<div class="flex justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer" onclick="actions.startEditWorkspace('${state.selectedWorkspace}')"><span>${ws?.name || 'Loading...'}</span></div>`
+                   }
+                </div>
+                <div class="mt-2 space-y-1">
+                   ${state.workspaces.map(w => `<div onclick="actions.selectWorkspace('${w.id}')" class="p-2 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${w.id===state.selectedWorkspace?'bg-blue-50 text-blue-600':''}">${w.name}</div>`).join('')}
+                   <button onclick="actions.addWorkspace()" class="w-full text-left text-xs text-blue-500 mt-1 px-2">+ New Workspace</button>
+                </div>
              </div>
-             <div class="mt-2 space-y-1">
-               ${state.workspaces.map(w => `
-                  <div class="flex items-center justify-between text-sm px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer ${w.id === state.selectedWorkspace ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-600 dark:text-gray-400'}"
-                       onclick="actions.selectWorkspace('${w.id}')">
-                     <span>${w.name}</span>
-                     ${w.id === state.selectedWorkspace ? `<i data-lucide="trash-2" class="w-3 h-3 text-red-400 hover:text-red-600" onclick="event.stopPropagation(); actions.deleteWorkspace('${w.id}')"></i>` : ''}
-                  </div>
-               `).join('')}
-               <button onclick="actions.addWorkspace()" class="w-full text-left text-xs text-blue-500 hover:underline mt-1 px-2">+ New Workspace</button>
-             </div>
-          </div>
-          <div class="flex-1 overflow-y-auto p-3">
-             <div class="flex items-center justify-between mb-2">
-                <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Projects</div>
-                <button onclick="actions.addProject()" class="text-gray-500 hover:text-blue-500"><i data-lucide="plus" class="w-4 h-4"></i></button>
-             </div>
-             <div class="space-y-1">
-               ${wsProjects.map(p => `
-                 <div class="group flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer ${p.id === state.selectedProject ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'}"
-                      onclick="actions.selectProject('${p.id}')">
-                    <div class="flex items-center gap-2 truncate">
-                      <span class="w-2 h-2 rounded-full ${p.color || 'bg-gray-400'}"></span>
-                      ${state.ui.editingProjectId === p.id 
-                        ? `<input id="proj-name-input-${p.id}" class="w-24 px-1 py-0.5 text-xs border rounded" value="${state.ui.editingProjectName}" onclick="event.stopPropagation()" onblur="actions.saveProjectName('${p.id}')" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" />`
-                        : `<span ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`
-                      }
-                    </div>
-                    <div class="hidden group-hover:flex items-center gap-1">
-                       <i data-lucide="edit-2" class="w-3 h-3 text-gray-400 hover:text-blue-500" onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"></i>
-                       <i data-lucide="trash" class="w-3 h-3 text-gray-400 hover:text-red-500" onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"></i>
-                    </div>
-                 </div>
-               `).join('')}
+             <div>
+                <div class="text-xs font-bold text-gray-400 mb-2 flex justify-between">PROJECTS <button onclick="actions.addProject()">+</button></div>
+                ${prjs.map(p => `
+                   <div class="group flex justify-between p-2 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${p.id===state.selectedProject?'bg-blue-50 text-blue-600':''}" onclick="actions.selectProject('${p.id}')">
+                      <div class="flex gap-2 truncate">
+                         <span class="w-2 h-2 rounded-full ${p.color||'bg-gray-400'}"></span>
+                         ${state.ui.editingProjectId===p.id 
+                           ? `<input id="proj-name-input-${p.id}" class="w-24 px-1 py-0.5 text-xs border" value="${state.ui.editingProjectName}" onclick="event.stopPropagation()" onblur="actions.saveProjectName('${p.id}')" />`
+                           : `<span ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`}
+                      </div>
+                      <div class="hidden group-hover:flex gap-1">
+                         <i data-lucide="edit-2" class="w-3 h-3 text-gray-400 hover:text-blue-500" onclick="event.stopPropagation(); actions.startEditProject('${p.id}')"></i>
+                         <i data-lucide="trash" class="w-3 h-3 text-gray-400 hover:text-red-500" onclick="event.stopPropagation(); actions.deleteProject('${p.id}')"></i>
+                      </div>
+                   </div>
+                `).join('')}
              </div>
           </div>
-          <div class="p-4 border-t dark:border-gray-700 text-xs text-gray-500">
-             <div class="flex items-center gap-2 mb-2">
-               <button onclick="actions.toggleTheme()" class="flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-200">
-                 <i data-lucide="${state.darkMode ? 'sun' : 'moon'}" class="w-4 h-4"></i>
-                 ${state.darkMode ? 'Light Mode' : 'Dark Mode'}
-               </button>
-             </div>
-             ${state.currentUser ? `<div class="truncate">👤 ${state.currentUser.name}</div>` : ''}
+          <div class="p-4 border-t dark:border-gray-700">
+             <button onclick="actions.toggleTheme()" class="text-xs text-gray-500">Toggle Theme</button>
           </div>
-        </div>
-      `;
-    }
-
-    function renderCellForColumn(task, col) {
-      if (col.id === 'task') {
-        return state.ui.editingTaskId === task.id
-          ? `<input id="task-name-input-${task.id}" class="w-full bg-white dark:bg-gray-700 border border-blue-400 rounded px-2 py-1" value="${task.name}" onblur="actions.saveTaskName('${task.id}')" onkeydown="if(event.key==='Enter') actions.saveTaskName('${task.id}')" />`
-          : `<span class="cursor-text hover:text-blue-600 dark:hover:text-blue-400" onclick="actions.startEditTaskName('${task.id}')">${task.name}</span>`;
-      }
-      if (col.id === 'priority') {
-        const p = task.priority || 'Medium';
-        return `
-          <select onchange="actions.updateTaskField('${task.id}', 'priority', this.value)" 
-                  class="text-xs border-0 bg-transparent rounded px-1.5 py-0.5 cursor-pointer ${priorityClass(p)}">
-            <option value="Low" ${p==='Low'?'selected':''}>Low</option>
-            <option value="Medium" ${p==='Medium'?'selected':''}>Medium</option>
-            <option value="High" ${p==='High'?'selected':''}>High</option>
-            <option value="Critical" ${p==='Critical'?'selected':''}>Critical</option>
-          </select>`;
-      }
-      if (col.id === 'status') {
-         return `
-           <select onchange="actions.updateTaskField('${task.id}', 'status', this.value)" class="bg-transparent text-xs border border-gray-200 dark:border-gray-600 rounded px-1">
-             <option value="Not Started" ${task.status==='Not Started'?'selected':''}>Not Started</option>
-             <option value="In Progress" ${task.status==='In Progress'?'selected':''}>In Progress</option>
-             <option value="Done" ${task.status==='Done'?'selected':''}>Done</option>
-             <option value="Stuck" ${task.status==='Stuck'?'selected':''}>Stuck</option>
-           </select>
-         `;
-      }
-      if (col.id === 'assignee') {
-         return `<input type="text" placeholder="Unassigned" class="bg-transparent w-full text-xs focus:outline-none" value="${task.assignee?.name || ''}" onchange="actions.updateTaskField('${task.id}', 'assignee', this.value)" />`;
-      }
-      if (col.id === 'duedate') {
-         return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate||''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
-      }
-      const val = (task.customFields && task.customFields[col.id]) || "";
-      return `<input type="text" class="bg-transparent w-full text-xs focus:outline-none text-gray-600 dark:text-gray-300" value="${val}" onchange="actions.updateTaskField('${task.id}', 'custom', this.value, '${col.id}')" />`;
+        </div>`;
     }
 
     function renderListView() {
-      const projectGroups = state.groups.filter(g => g.projectId === state.selectedProject);
-      const activeProject = state.projects.find(p => p.id === state.selectedProject);
-      if(!activeProject) return `<div class="p-10 text-gray-400">Select a project</div>`;
-
+      if(!state.selectedProject) return `<div class="p-10">Select a project</div>`;
+      const groups = state.groups.filter(g => g.projectId === state.selectedProject);
+      const proj = state.projects.find(p => p.id === state.selectedProject);
+      
       return `
         <div class="h-full flex flex-col bg-white dark:bg-gray-900">
-           <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between">
-             <div>
-                <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                   <span class="w-3 h-3 rounded-full ${activeProject.color}"></span>
-                   ${activeProject.name}
-                </h1>
-                <p class="text-sm text-gray-500">List View</p>
-             </div>
-             <div class="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-                 <button class="px-3 py-1 rounded shadow bg-white dark:bg-gray-700 text-xs font-medium">List</button>
-                 <button onclick="actions.setView('kanban')" class="px-3 py-1 rounded text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-medium">Kanban</button>
-             </div>
+           <div class="px-6 py-4 border-b flex justify-between dark:border-gray-700">
+              <h1 class="text-xl font-bold dark:text-white">${proj?.name}</h1>
+              <div><button onclick="actions.setView('kanban')" class="text-sm bg-gray-100 px-2 py-1 rounded">Kanban</button></div>
            </div>
-
-           <div class="flex-1 overflow-y-auto p-6 space-y-8">
-             ${projectGroups.map(group => {
-                 const groupTasks = state.tasks.filter(t => t.groupId === group.id);
-                 return `
-                   <div class="mb-8">
-                      <div class="flex items-center gap-2 mb-2 group">
-                         <button onclick="actions.toggleGroupCollapse('${group.id}')" class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-500 transition-transform ${group.collapsed ? '-rotate-90' : ''}">
-                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
-                         </button>
-                         ${state.ui.editingGroupId === group.id 
-                           ? `<input id="group-name-input-${group.id}" value="${state.ui.editingGroupName}" class="border rounded px-2 py-1 text-lg font-medium dark:bg-gray-800 dark:text-white" onblur="actions.saveGroupName('${group.id}')" onkeydown="if(event.key==='Enter') actions.saveGroupName('${group.id}')" />`
-                           : `<h2 class="text-lg font-medium text-${activeProject.color.split('-')[1] || 'blue'}-600 dark:text-${activeProject.color.split('-')[1] || 'blue'}-400 cursor-pointer" ondblclick="actions.startEditGroup('${group.id}')">${group.name}</h2>`
-                         }
-                         <span class="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">${groupTasks.length} tasks</span>
-                         
-                         <div class="relative ml-auto">
-                            <button onclick="actions.toggleColumnsPanel('${group.id}')" class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-500"><i data-lucide="plus-circle" class="w-4 h-4"></i></button>
-                            ${state.ui.columnsGroupId === group.id ? renderColumnsPanel(group) : ''}
-                         </div>
-                         <button onclick="actions.deleteGroup('${group.id}')" class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                      </div>
-
-                      ${!group.collapsed ? `
-                        <div class="overflow-x-auto rounded-lg border dark:border-gray-700">
-                          <table class="w-full text-left border-collapse">
-                            <thead>
-                              <tr class="bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
-                                <th class="w-8 p-2 text-center"></th>
-                                ${group.columns.map(col => `
-                                  <th class="font-normal p-2 border-r dark:border-gray-700 min-w-[150px] group/col">
-                                    <div class="flex items-center justify-between">
-                                      ${state.ui.editingColumnGroupId === group.id && state.ui.editingColumnId === col.id
-                                         ? `<input id="col-name-input-${group.id}-${col.id}" 
-                                                 class="w-full bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 text-xs font-normal"
-                                                 value="${col.name}" 
-                                                 onblur="actions.saveColumnName('${group.id}', '${col.id}')"
-                                                 onkeydown="if(event.key==='Enter') actions.saveColumnName('${group.id}', '${col.id}')"
-                                            />`
-                                         : `<span class="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400" ondblclick="actions.startEditColumn('${group.id}', '${col.id}')" title="Double-click to rename">${col.name}</span>`
-                                      }
-                                      ${!col.isDefault 
-                                        ? `<i data-lucide="x" class="w-3 h-3 cursor-pointer hover:text-red-500 opacity-0 group-hover/col:opacity-100" onclick="actions.deleteColumn('${group.id}', '${col.id}')"></i>` 
-                                        : ''}
-                                    </div>
-                                  </th>
-                                `).join('')}
-                                <th class="w-10"></th>
-                              </tr>
-                            </thead>
-                            <tbody class="text-sm divide-y dark:divide-gray-700 bg-white dark:bg-gray-900">
-                               ${groupTasks.map(task => `
-                                 <tr class="group/row hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                   <td class="p-2 text-center text-gray-300"><i data-lucide="grip-vertical" class="w-4 h-4"></i></td>
-                                   ${group.columns.map(col => `
-                                     <td class="p-2 border-r dark:border-gray-700 text-gray-700 dark:text-gray-200">
-                                        ${renderCellForColumn(task, col)}
-                                     </td>
+           <div class="flex-1 overflow-y-auto p-6">
+              ${groups.map(g => {
+                  const tasks = state.tasks.filter(t => t.groupId === g.id);
+                  return `
+                    <div class="mb-8">
+                       <div class="flex items-center gap-2 mb-2 group">
+                          <button onclick="actions.toggleGroupCollapse('${g.id}')" class="p-1"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+                          ${state.ui.editingGroupId===g.id 
+                            ? `<input id="group-name-input-${g.id}" value="${state.ui.editingGroupName}" class="border px-1" onblur="actions.saveGroupName('${g.id}')" />`
+                            : `<h2 class="font-bold cursor-pointer" ondblclick="actions.startEditGroup('${g.id}')">${g.name}</h2>`
+                          }
+                          <span class="text-xs bg-gray-100 px-2 rounded">${tasks.length}</span>
+                          <div class="relative ml-auto">
+                             <button onclick="actions.toggleColumnsPanel('${g.id}')" class="text-xs text-blue-500">+ Col</button>
+                             ${state.ui.columnsGroupId===g.id ? renderColumnsPanel(g) : ''}
+                          </div>
+                          <button onclick="actions.deleteGroup('${g.id}')" class="opacity-0 group-hover:opacity-100 text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                       </div>
+                       ${!g.collapsed ? `
+                       <div class="border rounded dark:border-gray-700 overflow-x-auto">
+                          <table class="w-full text-left">
+                             <thead class="bg-gray-50 dark:bg-gray-800 text-xs">
+                                <tr>
+                                   <th class="w-8"></th>
+                                   ${g.columns.map(c => `
+                                      <th class="p-2 border-r dark:border-gray-700 font-normal">
+                                         ${state.ui.editingColumnGroupId===g.id && state.ui.editingColumnId===c.id 
+                                           ? `<input id="col-name-input-${g.id}-${c.id}" value="${c.name}" class="w-full" onblur="actions.saveColumnName('${g.id}','${c.id}')" />`
+                                           : `<span ondblclick="actions.startEditColumn('${g.id}','${c.id}')">${c.name}</span>`
+                                         }
+                                      </th>
                                    `).join('')}
-                                   <td class="p-2 text-center">
-                                     <button onclick="actions.deleteTask('${task.id}')" class="opacity-0 group-hover/row:opacity-100 text-gray-400 hover:text-red-500"><i data-lucide="trash" class="w-4 h-4"></i></button>
-                                   </td>
-                                 </tr>
-                               `).join('')}
-                               ${state.ui.showNewTask === group.id
-                                 ? `<tr class="bg-blue-50 dark:bg-blue-900/10">
-                                      <td class="p-2"></td>
-                                      <td class="p-2 border-r dark:border-gray-700">
-                                        <input id="new-task-name-${group.id}" class="w-full bg-transparent border-b border-blue-500 focus:outline-none" placeholder="Task name..." autofocus onkeydown="if(event.key==='Enter') actions.submitTask('${group.id}')" />
-                                      </td>
-                                      <td colspan="${group.columns.length}" class="p-2">
-                                        <button onclick="actions.submitTask('${group.id}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Add</button>
-                                        <button onclick="actions.setShowNewTask(null)" class="ml-2 text-gray-500 text-xs">Cancel</button>
-                                      </td>
-                                    </tr>`
-                                 : `<tr>
-                                      <td class="p-2"></td>
-                                      <td class="p-2" colspan="${group.columns.length + 1}">
-                                        <button onclick="actions.setShowNewTask('${group.id}')" class="flex items-center gap-1 text-gray-400 hover:text-blue-500 text-sm">
-                                           <i data-lucide="plus" class="w-4 h-4"></i> Add Task
-                                        </button>
-                                      </td>
-                                    </tr>`
-                               }
-                            </tbody>
+                                </tr>
+                             </thead>
+                             <tbody class="text-sm dark:text-gray-300 divide-y dark:divide-gray-700">
+                                ${tasks.map(t => `
+                                   <tr class="group/row hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                      <td class="p-2 text-center text-gray-300">::</td>
+                                      ${g.columns.map(c => `<td class="p-2 border-r dark:border-gray-700">${renderCellForColumn(t,c)}</td>`).join('')}
+                                      <td class="p-2"><button onclick="actions.deleteTask('${t.id}')" class="opacity-0 group-hover/row:opacity-100 text-red-500"><i data-lucide="trash" class="w-3 h-3"></i></button></td>
+                                   </tr>
+                                `).join('')}
+                                ${state.ui.showNewTask===g.id ? `
+                                   <tr>
+                                      <td></td>
+                                      <td colspan="${g.columns.length}"><div class="flex gap-2 p-2"><input id="new-task-name-${g.id}" class="border w-full" autofocus /><button onclick="actions.submitTask('${g.id}')">Add</button></div></td>
+                                   </tr>` 
+                                   : `<tr><td colspan="${g.columns.length+1}" class="p-2"><button onclick="actions.setShowNewTask('${g.id}')" class="text-gray-400 text-xs">+ Add Task</button></td></tr>`
+                                }
+                             </tbody>
                           </table>
-                        </div>
-                      ` : ''}
-                   </div>
-                 `;
-             }).join('')}
-             <button onclick="actions.addGroup()" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2">
-                <i data-lucide="plus" class="w-5 h-5"></i> Add New Group
-             </button>
+                       </div>` : ''}
+                    </div>`;
+              }).join('')}
+              <button onclick="actions.addGroup()" class="w-full py-2 border-2 border-dashed text-gray-400 hover:border-blue-500 hover:text-blue-500">+ Add Group</button>
            </div>
-        </div>
-      `;
-    }
-
-    function renderColumnsPanel(group) {
-      return `
-        <div class="absolute right-0 top-6 w-48 bg-white dark:bg-gray-800 shadow-xl rounded-lg border dark:border-gray-700 z-10 p-2">
-           <div class="text-xs font-bold text-gray-500 mb-2">ADD COLUMNS</div>
-           <button onclick="actions.addColumn('${group.id}')" class="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-blue-500">+ Custom Text</button>
-        </div>
-      `;
+        </div>`;
     }
 
     function renderKanbanView() {
-      const projectGroups = state.groups.filter(g => g.projectId === state.selectedProject);
-      const activeProject = state.projects.find(p => p.id === state.selectedProject);
-      if(!activeProject) return `<div class="p-10 text-gray-400">Select a project</div>`;
-
-      return `
+        const projectGroups = state.groups.filter(g => g.projectId === state.selectedProject);
+        return `
         <div class="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
-           <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between bg-white dark:bg-gray-900">
-              <h1 class="text-xl font-bold text-gray-800 dark:text-white">${activeProject.name} <span class="text-sm font-normal text-gray-500">Kanban</span></h1>
-              <div class="flex gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-                 <button onclick="actions.setView('list')" class="px-3 py-1 rounded text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-medium">List</button>
-                 <button class="px-3 py-1 rounded shadow bg-white dark:bg-gray-700 text-xs font-medium">Kanban</button>
-              </div>
+           <div class="px-6 py-4 border-b flex justify-between dark:border-gray-700">
+              <h1 class="text-xl font-bold dark:text-white">Kanban View</h1>
+              <div><button onclick="actions.setView('list')" class="text-sm bg-gray-100 px-2 py-1 rounded">List</button></div>
            </div>
-           
-           <div class="flex-1 overflow-x-auto overflow-y-hidden p-6">
-              <div class="flex h-full gap-6">
-                 ${projectGroups.map(group => {
-                   const tasks = state.tasks.filter(t => t.groupId === group.id);
-                   return `
-                     <div class="w-80 flex flex-col h-full bg-gray-100 dark:bg-gray-800/50 rounded-xl border dark:border-gray-700">
-                        <div class="p-3 font-semibold text-gray-700 dark:text-gray-200 flex justify-between">
-                           <span>${group.name}</span>
-                           <span class="bg-gray-200 dark:bg-gray-700 text-xs px-2 py-0.5 rounded-full">${tasks.length}</span>
-                        </div>
-                        <div class="flex-1 overflow-y-auto p-2 space-y-2">
-                           ${tasks.map(t => `
-                              <div class="bg-white dark:bg-gray-800 p-3 rounded-lg shadow-sm border dark:border-gray-700 hover:shadow-md cursor-pointer group">
-                                  <div class="flex justify-between items-start mb-2">
-                                     <span class="text-xs px-1.5 py-0.5 rounded ${priorityClass(t.priority)}">${t.priority}</span>
-                                     <i data-lucide="more-horizontal" class="w-4 h-4 text-gray-400"></i>
-                                  </div>
-                                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">${t.name}</div>
-                                  <div class="flex items-center justify-between mt-2">
-                                     <div class="flex items-center gap-1 text-xs text-gray-500">
-                                         <i data-lucide="user" class="w-3 h-3"></i> ${t.assignee ? t.assignee.name.substring(0,6)+'...' : '-'}
-                                     </div>
-                                     <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                         <button class="p-1 hover:bg-red-100 rounded text-red-500" onclick="actions.deleteTask('${t.id}')"><i data-lucide="trash" class="w-3 h-3"></i></button>
-                                     </div>
-                                  </div>
-                              </div>
-                           `).join('')}
-                        </div>
-                        <div class="p-2">
-                           <button onclick="actions.setShowNewTask('${group.id}'); actions.setView('list')" class="w-full py-2 text-sm text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg flex items-center justify-center gap-1">
-                             <i data-lucide="plus" class="w-4 h-4"></i> Add Task
-                           </button>
-                        </div>
-                     </div>
-                   `;
-                 }).join('')}
-                 <button onclick="actions.addGroup()" class="w-80 h-12 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center text-gray-500 hover:border-blue-500 hover:text-blue-500">
-                    + Add Section
-                 </button>
-              </div>
+           <div class="flex-1 overflow-x-auto p-6 flex gap-4">
+              ${projectGroups.map(g => {
+                  const tasks = state.tasks.filter(t => t.groupId === g.id);
+                  return `<div class="w-72 bg-gray-100 dark:bg-gray-800 p-3 rounded-lg h-full overflow-y-auto">
+                     <div class="font-bold mb-2 dark:text-white">${g.name}</div>
+                     ${tasks.map(t => `<div class="bg-white dark:bg-gray-700 p-2 mb-2 rounded shadow text-sm dark:text-gray-200">${t.name}</div>`).join('')}
+                  </div>`;
+              }).join('')}
            </div>
-        </div>
-      `;
+        </div>`;
     }
 
     function renderApp() {
