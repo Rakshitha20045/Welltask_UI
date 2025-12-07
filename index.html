@@ -70,7 +70,7 @@
     const channelId = urlParams.get("channelId");
     let urlBoardId = urlParams.get("boardid");
 
-    // If in team mode, the Channel ID IS the Board ID
+    // If in team mode, the Channel ID IS the Board ID lookup key
     if (mode === "team" && channelId) {
       urlBoardId = channelId;
     }
@@ -82,7 +82,6 @@
     // --- 2. AUTHENTICATION & TOKEN PARSING ---
 
     // A. Check Local Storage First (The "Refresh" Fix)
-    // This allows the user to refresh the page without needing a new link
     try {
         const stored = localStorage.getItem("welltask_session");
         if (stored) {
@@ -95,18 +94,16 @@
     } catch (e) { }
 
     // B. Check URL Token (The "Security" Fix)
-    // If a token is provided, it overrides the saved session (fresh login)
     if (token) {
       try {
         const decoded = atob(token);
         const parts = decoded.split("::");
         
-        // parts structure: [0]=email, [1]=id, [2]=timestamp
-        // UPDATED: Now checking for 4 parts (Email, ID, Time, Salt)
+        // parts structure: [0]=email, [1]=id, [2]=timestamp, [3]=salt
         if (parts.length >= 4) {
           const tokenTime = parseInt(parts[2]);
           const receivedSalt = parts[3];
-          const EXPECTED_SALT = "ZohoCliqtrixWinner2025"; // 👈 THIS MUST MATCH DELUGE SCRIPT
+          const EXPECTED_SALT = "ZohoCliqtrixWinner2025"; 
 
           // 🛡️ SECURITY CHECK 1: SALT VERIFICATION
           if (receivedSalt !== EXPECTED_SALT) {
@@ -131,13 +128,13 @@
             email: parts[0].trim() 
           };
         } else {
-           // Support for old tokens without timestamp (Optional fallback)
+           // Support for old tokens
            if(parts.length >= 2) {
              currentUser = { id: parts[1], name: parts[0].split("@")[0], email: parts[0].trim() };
            }
         }
 
-        // ✨ NEW: SAVE SESSION TO BROWSER (Persist login)
+        // ✨ NEW: SAVE SESSION TO BROWSER
         if (currentUser) {
             localStorage.setItem("welltask_session", JSON.stringify({
                 user: currentUser,
@@ -147,22 +144,20 @@
         
       } catch (e) { 
         console.error("Auth Failed", e); 
-        // If token fails, currentUser remains null
       }
     } else if (savedSession) {
-        // No URL token, but we have a valid saved session from before
         currentUser = savedSession;
         console.log("🔄 Restored Session for:", currentUser.email);
     }
 
-    // C. Determine Board ID
+    // C. Determine Initial Board ID
     if (currentUser) {
         if (mode === "team") {
-            boardid = urlBoardId; 
+            boardid = urlBoardId; // This is 'CT_...' initially
         } else {
             boardid = currentUser.id;
         }
-        console.log("🔐 Auth Success:", currentUser.email, "Mode:", mode, "BoardID:", boardid);
+        console.log("🔐 Auth Success:", currentUser.email, "Mode:", mode, "LookupID:", boardid);
     }
 
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
@@ -187,14 +182,45 @@
       }
     }
 
-    // --- 3. FIREBASE LOGIC ---
-    async function firebaseLoadBoard(docId) {
+    // --- 3. FIREBASE LOGIC (UPDATED QUERY) ---
+    async function firebaseLoadBoard(lookupId) {
       try {
-        if (!docId) return null;
-        const ref = db.collection("boards").doc(docId);
-        const snap = await ref.get();
-        if (!snap.exists) return null;
-        return snap.data();
+        if (!lookupId) return null;
+
+        // 1. Try Loading Directly by Document ID (Personal Boards or if we know the ID)
+        let ref = db.collection("boards").doc(lookupId);
+        let snap = await ref.get();
+
+        if (snap.exists) {
+            console.log("✅ Found board by Document ID");
+            return snap.data();
+        }
+
+        // 2. If Direct ID fails, and we are in Team Mode, try Querying by channel_id
+        // The URL gives us 'CT_...'. We need to find the document that *contains* that ID.
+        if (mode === "team") {
+            console.log("⚠️ Doc ID not found, querying by channel_id:", lookupId);
+            
+            // Query: Find document where field 'channel_id' == 'CT_...'
+            const q = db.collection("boards").where("channel_id", "==", lookupId);
+            const querySnap = await q.get();
+
+            if (!querySnap.empty) {
+                const doc = querySnap.docs[0];
+                const realData = doc.data();
+                
+                // IMPORTANT: Update the global 'boardid' to the REAL numeric Document ID (1765...)
+                // This ensures future Saves go to the correct document, not a new 'CT_...' doc.
+                boardid = doc.id; 
+                console.log("✅ Board found via Query! Real Document ID is:", boardid);
+                
+                return realData;
+            } else {
+                console.log("❌ No board found for this Channel ID.");
+            }
+        }
+
+        return null;
       } catch (e) {
         console.error("💥 [Firebase] Load error:", e);
         return null;
@@ -205,8 +231,6 @@
       try {
         if (!docId) return;
         const ref = db.collection("boards").doc(docId);
-        // MERGE true allows updating fields without overwriting everything, 
-        // but here we overwrite state to keep sync.
         await ref.set({
           ...payload,
           boardid: docId,
@@ -250,25 +274,21 @@
       ...initialState
     };
 
-    // --- 5. PERMISSION CHECKER (CRITICAL FIX) ---
+    // --- 5. PERMISSION CHECKER ---
     function checkBoardPermission(board) {
       if (!board) return true; // If new board, we allow (it will be claimed on save)
       if (!currentUser) return false;
 
       const userEmail = currentUser.email.toLowerCase();
       const boardType = board.type || "personal";
-      const allowed = (board.allowed_users || []).map(e => e.toLowerCase().trim()); // Normalize list
+      const allowed = (board.allowed_users || []).map(e => e.toLowerCase().trim());
 
       console.log(`🕵️ Checking Access. User: ${userEmail} | Type: ${boardType}`);
       console.log("📋 Allowed List:", allowed);
 
-      // PERSONAL BOARD SECURITY
       if (boardType === "personal") {
-        // STRICT: Only the owner (allowed list) can see it
         return allowed.includes(userEmail);
       }
-
-      // TEAM BOARD SECURITY
       if (boardType === "team") {
         return allowed.includes(userEmail);
       }
@@ -301,6 +321,8 @@
 
           // 1. Try Loading from Firebase
           if (boardid) {
+            // Note: boardid might be 'CT_...' initially. 
+            // firebaseLoadBoard will update it to '1765...' if found via query.
             fbData = await firebaseLoadBoard(boardid);
 
             if (fbData) {
@@ -405,6 +427,7 @@
           let allowedUsers = [];
 
           // Fetch existing to preserve teammates
+          // Note: boardid is now the correct numeric ID thanks to firebaseLoadBoard update
           const existing = await firebaseLoadBoard(boardid);
 
           if (existing && existing.allowed_users) {
@@ -420,9 +443,6 @@
 
           // If Personal mode, FORCE strict owner access only
           if (mode === "personal") {
-            // For personal, usually just the owner. 
-            // If you want to allow sharing personal boards later, remove the line below.
-            // But for the contest security requirement:
             allowedUsers = [state.currentUser.email];
           }
 
@@ -436,6 +456,7 @@
             type: mode, // 'personal' or 'team'
             ownerId: state.currentUser.id,
             allowed_users: allowedUsers, // 👈 SAVES SECURITY
+            channel_id: channelId || null, // Ensure channel_id is saved for querying
             updatedAt: Date.now()
           };
 
@@ -1164,4 +1185,3 @@
 </body>
 
 </html>
-
