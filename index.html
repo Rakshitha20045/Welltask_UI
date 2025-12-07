@@ -295,33 +295,32 @@
       return allowed.includes(userEmail);
     }
 
-    // --- 6. NOTIFICATION SYSTEM (FORM DATA FIX) ---
+    // --- 6. NOTIFICATION SYSTEM (GET METHOD) ---
     async function sendNotificationToCliq(taskName) {
-        if (!channelId || mode !== "team") return; 
+        if (!channelId || mode !== "team") return;
 
-        // 🟢 YOUR EXTENSION WEBHOOK URL
-        const webhookUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
+        // 🟢 YOUR EXTENSION WEBHOOK URL (keep as-is)
+        const baseUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
 
-        console.log("📤 Sending notification...");
+        console.log("📤 Preparing GET Notification...");
 
-        // 1. Create Form Data (Key=Value format)
-        const formData = new URLSearchParams();
-        formData.append("channel_id", channelId);
-        formData.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser.name}`);
+        // 1. Put data into the URL (browser cannot strip URL parameters)
+        const params = new URLSearchParams();
+        params.append("channel_id", channelId);
+        // encode the message so special characters/newlines are safe in the URL
+        params.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser?.name || "Unknown"}`);
+
+        const finalUrl = baseUrl + "&" + params.toString();
 
         try {
-            // 2. Send using 'no-cors' with Form Content-Type
-            await fetch(webhookUrl, {
-                method: "POST",
-                mode: "no-cors", 
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: formData 
+            // 2. Send as GET (works like loading an image; browser can't remove the query)
+            await fetch(finalUrl, {
+                method: "GET",
+                mode: "no-cors"
             });
-            console.log("✅ Notification Sent (Form Data Mode)");
-        } catch (e) { 
-            console.error("❌ Notification Failed:", e); 
+            console.log("✅ Notification Request Sent (GET Mode)");
+        } catch (e) {
+            console.error("❌ Notification Failed:", e);
         }
     }
 
