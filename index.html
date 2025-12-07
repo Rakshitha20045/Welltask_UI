@@ -266,8 +266,7 @@
         editingGroupId: null,
         editingGroupName: "",
         editingColumnGroupId: null,
-        editingColumnId: null,
-        columnsGroupId: null
+        editingColumnId: null
       }
     };
 
@@ -642,7 +641,7 @@
           state.ui.editingWorkspaceId = id;
           state.ui.editingWorkspaceName = ws.name;
           renderApp();
-          // focus the input after render
+          // FIX: Add focus logic
           setTimeout(() => {
             const el = document.getElementById(`ws-name-input-${id}`);
             if (el) {
@@ -680,6 +679,7 @@
           state.ui.editingProjectId = id;
           state.ui.editingProjectName = p.name;
           renderApp();
+          // FIX: Add focus logic
           setTimeout(() => {
             const el = document.getElementById(`proj-name-input-${id}`);
             if (el) {
@@ -904,7 +904,7 @@
                   <div onclick="actions.selectWorkspace('${w.id}')" class="flex items-center justify-between px-2 py-1 rounded cursor-pointer ${isActive ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-700 dark:text-gray-300'} hover:bg-gray-100 dark:hover:bg-gray-700">
                     <div class="flex items-center gap-2">
                       <button onclick="event.stopPropagation(); actions.toggleWorkspaceCollapse('${w.id}')" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i data-lucide="${collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i></button>
-                      ${state.ui.editingWorkspaceId === w.id ? `<input id="ws-name-input-${w.id}" class="text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingWorkspaceName}" onblur="actions.saveWorkspaceName('${w.id}')" onkeydown="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" />` : `<span class="font-medium truncate text-sm cursor-text" ondblclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')">${w.name}</span>`}
+                      ${state.ui.editingWorkspaceId === w.id ? `<input id="ws-name-input-${w.id}" class="text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingWorkspaceName}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onblur="actions.saveWorkspaceName('${w.id}')" onkeydown="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" />` : `<span class="font-medium truncate text-sm cursor-text" ondblclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')">${w.name}</span>`}
                     </div>
                     <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition" onclick="event.stopPropagation()">
                       <i data-lucide="${w.isFavorite ? 'star' : 'star-off'}" class="w-4 h-4 cursor-pointer text-yellow-400 hover:text-yellow-500" onclick="event.stopPropagation(); actions.toggleFavoriteWorkspace('${w.id}')"></i>
@@ -917,7 +917,7 @@
                       <div class="group flex items-center justify-between px-2 py-1.5 rounded cursor-pointer ${p.id === state.selectedProject ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'}" onclick="actions.selectProject('${p.id}')">
                         <div class="flex items-center gap-2 truncate">
                           <span class="w-2 h-2 rounded-full ${p.color || 'bg-gray-400'}"></span>
-                          ${state.ui.editingProjectId === p.id ? `<input id="proj-name-input-${p.id}" class="text-xs bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingProjectName}" onblur="actions.saveProjectName('${p.id}')" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" />` : `<span class="text-xs cursor-text" ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`}
+                          ${state.ui.editingProjectId === p.id ? `<input id="proj-name-input-${p.id}" class="text-xs bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingProjectName}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onblur="actions.saveProjectName('${p.id}')" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" />` : `<span class="text-xs cursor-text" ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`}
                         </div>
                         <div class="hidden group-hover:flex items-center gap-1" onclick="event.stopPropagation()">
                           <i data-lucide="${p.isFavorite ? 'star' : 'star-off'}" class="w-4 h-4 cursor-pointer text-yellow-400 hover:text-yellow-500" onclick="event.stopPropagation(); actions.toggleFavoriteProject('${p.id}')"></i>
