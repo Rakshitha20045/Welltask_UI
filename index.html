@@ -102,16 +102,24 @@
         const parts = decoded.split("::");
         
         // parts structure: [0]=email, [1]=id, [2]=timestamp
-        if (parts.length >= 3) {
+        // UPDATED: Now checking for 4 parts (Email, ID, Time, Salt)
+        if (parts.length >= 4) {
           const tokenTime = parseInt(parts[2]);
+          const receivedSalt = parts[3];
+          const EXPECTED_SALT = "ZohoCliqtrixWinner2025"; // 👈 THIS MUST MATCH DELUGE SCRIPT
+
+          // 🛡️ SECURITY CHECK 1: SALT VERIFICATION
+          if (receivedSalt !== EXPECTED_SALT) {
+             alert("⛔️ Security Violation: Invalid Token Signature.\nAccess Denied.");
+             throw new Error("Invalid Security Salt");
+          }
+
+          // 🕒 SECURITY CHECK 2: EXPIRATION (10 Minutes)
           const currentTime = Date.now();
-          // 10 minutes in milliseconds = 10 * 60 * 1000 = 600000
           const timeDiff = currentTime - tokenTime;
 
-          // 🕒 SECURITY CHECK: EXPIRATION
-          // This prevents "Replay Attacks" (using an old link)
-          if (timeDiff > 600000) {
-             alert("🔒 Security Alert: This session link has expired.\nTo ensure security, links are one-time use.\n\nPlease re-open the board from Zoho Cliq.");
+          if (timeDiff > 600000) { 
+             alert("🔒 Security Alert: This session link has expired.\nPlease re-open the board from Zoho Cliq.");
              throw new Error("Token Expired");
           } else {
              console.log("✅ Token Valid. Age:", Math.round(timeDiff/1000), "seconds");
@@ -1156,3 +1164,4 @@
 </body>
 
 </html>
+
