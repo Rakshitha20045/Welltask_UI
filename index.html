@@ -295,8 +295,33 @@
       return allowed.includes(userEmail);
     }
 
+    // --- 6. NOTIFICATION SYSTEM ---
+    async function sendNotificationToCliq(taskName) {
+        // Only send notifications for Team Boards
+        if (!channelId || mode !== "team") return; 
 
-    // --- 6. CORE API ---
+        // 🟢 YOUR EXTENSION WEBHOOK URL
+        const webhookUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
+
+        console.log("📤 Sending notification to:", channelId);
+
+        try {
+            await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    channel_id: channelId, // Sending the mapping key
+                    text: `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser.name}`
+                })
+            });
+            console.log("✅ Notification Sent");
+        } catch (e) { 
+            console.error("❌ Notification Failed:", e); 
+        }
+    }
+
+
+    // --- 7. CORE API ---
     const api = {
       saveTimer: null,
       load: async () => {
@@ -820,9 +845,11 @@
       submitTask: (gid) => {
         const input = document.getElementById(`new-task-name-${gid}`);
         if (!input || !input.value.trim()) return;
+        
+        const taskName = input.value.trim();
         state.tasks.push({
           id: uid(),
-          name: input.value.trim(),
+          name: taskName,
           groupId: gid,
           projectId: state.selectedProject,
           priority: "Medium",
@@ -834,6 +861,9 @@
         state.ui.showNewTask = null;
         renderApp();
         api.triggerSave();
+
+        // 🟢 TRIGGER NOTIFICATION TO CLIQ
+        sendNotificationToCliq(taskName);
       },
       startEditTaskName: (id) => {
         state.ui.editingTaskId = id;
