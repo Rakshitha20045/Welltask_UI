@@ -274,26 +274,25 @@
       ...initialState
     };
 
-    // --- 5. PERMISSION CHECKER ---
+    // --- 5. PERMISSION CHECKER (FIXED) ---
     function checkBoardPermission(board) {
-      if (!board) return true; // If new board, we allow (it will be claimed on save)
+      if (!board) return true; // New board (allow access so it can be created)
       if (!currentUser) return false;
 
-      const userEmail = currentUser.email.toLowerCase();
-      const boardType = board.type || "personal";
+      // 1. OWNER OVERRIDE: If I am the owner, always let me in.
+      // This prevents "Access Denied" on your own Personal boards.
+      if (board.ownerId && board.ownerId === currentUser.id) {
+          console.log("🔓 Access Granted: User is the Owner");
+          return true;
+      }
+
+      const userEmail = currentUser.email.toLowerCase().trim();
       const allowed = (board.allowed_users || []).map(e => e.toLowerCase().trim());
 
-      console.log(`🕵️ Checking Access. User: ${userEmail} | Type: ${boardType}`);
-      console.log("📋 Allowed List:", allowed);
+      console.log(`🕵️ Checking Access. User: ${userEmail}`);
 
-      if (boardType === "personal") {
-        return allowed.includes(userEmail);
-      }
-      if (boardType === "team") {
-        return allowed.includes(userEmail);
-      }
-
-      return false;
+      // 2. Check the Allowed List
+      return allowed.includes(userEmail);
     }
 
 
@@ -423,25 +422,24 @@
           state.saveStatus = "saving";
           renderStatusIndicator();
 
-          // --- 🔒 AUTOMATIC PERMISSION ASSIGNMENT ---
+          // --- 🔒 PERMISSION LOGIC ---
           let allowedUsers = [];
 
-          // Fetch existing to preserve teammates
-          // Note: boardid is now the correct numeric ID thanks to firebaseLoadBoard update
-          const existing = await firebaseLoadBoard(boardid);
-
-          if (existing && existing.allowed_users) {
-            allowedUsers = existing.allowed_users;
-            // Ensure current user is strictly in the list (self-healing)
+          // A. TEAM MODE: Preserve existing teammates
+          if (mode === "team") {
+            // Try to load existing permissions so we don't wipe teammates
+            const existing = await firebaseLoadBoard(boardid);
+            if (existing && existing.allowed_users) {
+              allowedUsers = existing.allowed_users;
+            }
+            // Add myself if I'm not in there
             if (!allowedUsers.includes(state.currentUser.email)) {
               allowedUsers.push(state.currentUser.email);
             }
-          } else {
-            // New Board: Initialize with Creator
-            allowedUsers = [state.currentUser.email];
           }
 
-          // If Personal mode, FORCE strict owner access only
+          // B. PERSONAL MODE: STRICTLY LIMIT TO OWNER ONLY
+          // This wipes any other users to ensure privacy.
           if (mode === "personal") {
             allowedUsers = [state.currentUser.email];
           }
@@ -453,10 +451,10 @@
             projects: state.projects,
             groups: state.groups,
             tasks: state.tasks,
-            type: mode, // 'personal' or 'team'
+            type: mode, 
             ownerId: state.currentUser.id,
-            allowed_users: allowedUsers, // 👈 SAVES SECURITY
-            channel_id: channelId || null, // Ensure channel_id is saved for querying
+            allowed_users: allowedUsers, // 👈 This applies the security rule
+            channel_id: (mode === "team") ? (channelId || null) : null,
             updatedAt: Date.now()
           };
 
