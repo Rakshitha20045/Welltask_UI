@@ -303,10 +303,10 @@
 
         console.log("📤 Preparing Channel Mapped Notification...");
 
-        // 🟢 YOUR EXTENSION WEBHOOK URL (Ensure the URL is correct for your extension)
+        // 🟢 YOUR EXTENSION WEBHOOK URL (Extracted from images)
         const baseUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
 
-        // 1. Build Query Parameters manually (using GET method to avoid CORS)
+        // 1. Build Query Parameters manually (using GET method to avoid CORS issues)
         const params = new URLSearchParams();
         params.append("channel_id", channelId); // This is the MAPPING KEY
         params.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser?.name || 'User'}`);
@@ -315,8 +315,7 @@
         const finalUrl = `${baseUrl}&${params.toString()}`;
 
         try {
-            // 3. Send using GET (Browser treats this like a standard request = No CORS block)
-            // This relies on the backend handler checking the 'params' variable.
+            // 3. Send using GET. This relies on the backend handler checking the 'params' variable.
             await fetch(finalUrl, {
                 method: "GET",
                 mode: "no-cors" 
@@ -473,7 +472,6 @@
           }
 
           // B. PERSONAL MODE: STRICTLY LIMIT TO OWNER ONLY
-          // This wipes any other users to ensure privacy.
           if (mode === "personal") {
             allowedUsers = [state.currentUser.email];
           }
