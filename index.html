@@ -295,33 +295,35 @@
       return allowed.includes(userEmail);
     }
 
-    // --- 6. NOTIFICATION SYSTEM (CORS FIXED) ---
+    // --- 6. NOTIFICATION SYSTEM (FORM DATA FIX) ---
     async function sendNotificationToCliq(taskName) {
-        // Only send notifications for Team Boards
         if (!channelId || mode !== "team") return; 
 
         // 🟢 YOUR EXTENSION WEBHOOK URL
         const webhookUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
 
-        console.log("📤 Sending notification to:", channelId);
+        console.log("📤 Sending notification...");
+
+        // 1. Create Form Data (Key=Value format)
+        const formData = new URLSearchParams();
+        formData.append("channel_id", channelId);
+        formData.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser.name}`);
 
         try {
-            // FIX: Added mode: 'no-cors' to bypass browser restriction
+            // 2. Send using 'no-cors' with Form Content-Type
             await fetch(webhookUrl, {
                 method: "POST",
                 mode: "no-cors", 
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    channel_id: channelId, // Sending the mapping key
-                    text: `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser.name}`
-                })
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: formData 
             });
-            console.log("✅ Notification Sent (No-CORS Mode)");
+            console.log("✅ Notification Sent (Form Data Mode)");
         } catch (e) { 
             console.error("❌ Notification Failed:", e); 
         }
     }
-
 
     // --- 7. CORE API ---
     const api = {
@@ -1013,7 +1015,7 @@
         `;
       }
       if (col.id === 'duedate') {
-        return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate || ''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
+        return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate || ''}" onchange="actions.updateTaskField('${task.id}', 'duedate', this.value)" />`;
       }
       const val = (task.customFields && task.customFields[col.id]) || "";
       return `<input type="text" class="bg-transparent w-full text-xs focus:outline-none text-gray-600 dark:text-gray-300" value="${val}" onchange="actions.updateTaskField('${task.id}', 'custom', this.value, '${col.id}')" />`;
