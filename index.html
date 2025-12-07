@@ -60,20 +60,7 @@
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
   <div id="app"></div>
   <script>
-    // --- CONFIGURABLE DEFAULTS (change these values to rename defaults) ---
-    const DEFAULT_WORKSPACE_NAME = "Team Workspace"; // was: "My Workspace"
-    const DEFAULT_PROJECT_NAME = "Project Alpha";    // was: "My Project"
-    const DEFAULT_GROUP_NAME = "Backlog";           // was: "To Do"
-
-    const DEFAULT_COLUMNS = [
-      { id: "task", name: "Title", isDefault: true },         // was: "Task"
-      { id: "assignee", name: "Owner", isDefault: true },     // was: "Assignee"
-      { id: "priority", name: "Priority Level", isDefault: true }, // was: "Priority"
-      { id: "status", name: "Stage", isDefault: true },       // was: "Status"
-      { id: "duedate", name: "Deadline", isDefault: true }    // was: "Due Date"
-    ];
-    // -----------------------------------------------------------------
-
+    // --- 1. CONFIGURATION ---
     console.log("💾 Firestore db available?", !!db);
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
@@ -143,7 +130,7 @@
         } else {
            // Support for old tokens
            if(parts.length >= 2) {
-            currentUser = { id: parts[1], name: parts[0].split("@")[0], email: parts[0].trim() };
+             currentUser = { id: parts[1], name: parts[0].split("@")[0], email: parts[0].trim() };
            }
         }
 
@@ -279,7 +266,8 @@
         editingGroupId: null,
         editingGroupName: "",
         editingColumnGroupId: null,
-        editingColumnId: null
+        editingColumnId: null,
+        columnsGroupId: null
       }
     };
 
@@ -373,25 +361,44 @@
         const g1 = uid(),
           g2 = uid(),
           g3 = uid();
-
-        const defaultColumns = JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+        const defaultColumns = [{
+          id: "task",
+          name: "Task",
+          isDefault: true
+        }, {
+          id: "assignee",
+          name: "Assignee",
+          isDefault: true
+        }, {
+          id: "priority",
+          name: "Priority",
+          isDefault: true
+        }, {
+          id: "status",
+          name: "Status",
+          isDefault: true
+        }, {
+          id: "duedate",
+          name: "Due Date",
+          isDefault: true
+        }];
 
         state.workspaces = [{
           id: wsId,
-          name: DEFAULT_WORKSPACE_NAME,
+          name: "My Workspace",
           isFavorite: false,
           collapsed: false
         }];
         state.projects = [{
           id: pId,
-          name: DEFAULT_PROJECT_NAME,
+          name: "My Project",
           color: "bg-purple-500",
           workspaceId: wsId,
           isFavorite: false
         }];
         state.groups = [{
           id: g1,
-          name: DEFAULT_GROUP_NAME,
+          name: "To Do",
           projectId: pId,
           collapsed: false,
           columns: JSON.parse(JSON.stringify(defaultColumns))
@@ -509,7 +516,7 @@
         const id = uid();
         state.projects.push({
           id,
-          name: DEFAULT_PROJECT_NAME,
+          name: "New Project",
           color: "bg-green-500",
           workspaceId: wsId
         });
@@ -517,10 +524,35 @@
         const g1 = uid();
         state.groups.push({
           id: g1,
-          name: DEFAULT_GROUP_NAME,
+          name: "To Do",
           projectId: id,
           collapsed: false,
-          columns: JSON.parse(JSON.stringify(DEFAULT_COLUMNS))
+          columns: [{
+              id: "task",
+              name: "Task",
+              isDefault: true
+            },
+            {
+              id: "assignee",
+              name: "Assignee",
+              isDefault: true
+            },
+            {
+              id: "priority",
+              name: "Priority",
+              isDefault: true
+            },
+            {
+              id: "status",
+              name: "Status",
+              isDefault: true
+            },
+            {
+              id: "duedate",
+              name: "Due Date",
+              isDefault: true
+            }
+          ]
         });
         renderApp();
         api.triggerSave();
@@ -542,7 +574,7 @@
         renderApp();
       },
       addWorkspace: () => {
-        const name = prompt("Enter workspace name:") || DEFAULT_WORKSPACE_NAME;
+        const name = prompt("Enter workspace name:");
         if (!name || !name.trim()) return;
         const id = uid();
         state.workspaces.push({
@@ -557,7 +589,7 @@
       },
       addProject: () => {
         if (!state.selectedWorkspace) return;
-        const name = prompt("Enter project name:") || DEFAULT_PROJECT_NAME;
+        const name = prompt("Enter project name:");
         if (!name || !name.trim()) return;
         const id = uid();
         state.projects.push({
@@ -571,10 +603,35 @@
         const g1 = uid();
         state.groups.push({
           id: g1,
-          name: DEFAULT_GROUP_NAME,
+          name: "To Do",
           projectId: id,
           collapsed: false,
-          columns: JSON.parse(JSON.stringify(DEFAULT_COLUMNS))
+          columns: [{
+              id: "task",
+              name: "Task",
+              isDefault: true
+            },
+            {
+              id: "assignee",
+              name: "Assignee",
+              isDefault: true
+            },
+            {
+              id: "priority",
+              name: "Priority",
+              isDefault: true
+            },
+            {
+              id: "status",
+              name: "Status",
+              isDefault: true
+            },
+            {
+              id: "duedate",
+              name: "Due Date",
+              isDefault: true
+            }
+          ]
         });
         renderApp();
         api.triggerSave();
@@ -585,6 +642,14 @@
           state.ui.editingWorkspaceId = id;
           state.ui.editingWorkspaceName = ws.name;
           renderApp();
+          // focus the input after render
+          setTimeout(() => {
+            const el = document.getElementById(`ws-name-input-${id}`);
+            if (el) {
+              el.focus();
+              el.select();
+            }
+          }, 60);
         }
       },
       saveWorkspaceName: (id) => {
@@ -615,6 +680,13 @@
           state.ui.editingProjectId = id;
           state.ui.editingProjectName = p.name;
           renderApp();
+          setTimeout(() => {
+            const el = document.getElementById(`proj-name-input-${id}`);
+            if (el) {
+              el.focus();
+              el.select();
+            }
+          }, 60);
         }
       },
       saveProjectName: (id) => {
@@ -832,7 +904,7 @@
                   <div onclick="actions.selectWorkspace('${w.id}')" class="flex items-center justify-between px-2 py-1 rounded cursor-pointer ${isActive ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-700 dark:text-gray-300'} hover:bg-gray-100 dark:hover:bg-gray-700">
                     <div class="flex items-center gap-2">
                       <button onclick="event.stopPropagation(); actions.toggleWorkspaceCollapse('${w.id}')" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i data-lucide="${collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i></button>
-                      ${state.ui.editingWorkspaceId === w.id ? `<input id="ws-name-input-${w.id}" class="text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingWorkspaceName}" onkeydown="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" autofocus />` : `<span class="font-medium truncate text-sm cursor-text" ondblclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')">${w.name}</span>`}
+                      ${state.ui.editingWorkspaceId === w.id ? `<input id="ws-name-input-${w.id}" class="text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingWorkspaceName}" onblur="actions.saveWorkspaceName('${w.id}')" onkeydown="if(event.key==='Enter') actions.saveWorkspaceName('${w.id}')" />` : `<span class="font-medium truncate text-sm cursor-text" ondblclick="event.stopPropagation(); actions.startEditWorkspace('${w.id}')">${w.name}</span>`}
                     </div>
                     <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition" onclick="event.stopPropagation()">
                       <i data-lucide="${w.isFavorite ? 'star' : 'star-off'}" class="w-4 h-4 cursor-pointer text-yellow-400 hover:text-yellow-500" onclick="event.stopPropagation(); actions.toggleFavoriteWorkspace('${w.id}')"></i>
@@ -845,7 +917,7 @@
                       <div class="group flex items-center justify-between px-2 py-1.5 rounded cursor-pointer ${p.id === state.selectedProject ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'}" onclick="actions.selectProject('${p.id}')">
                         <div class="flex items-center gap-2 truncate">
                           <span class="w-2 h-2 rounded-full ${p.color || 'bg-gray-400'}"></span>
-                          ${state.ui.editingProjectId === p.id ? `<input id="proj-name-input-${p.id}" class="text-xs bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingProjectName}" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" autofocus />` : `<span class="text-xs cursor-text" ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`}
+                          ${state.ui.editingProjectId === p.id ? `<input id="proj-name-input-${p.id}" class="text-xs bg-white dark:bg-gray-700 border border-blue-500 rounded px-1 py-0.5 w-32" value="${state.ui.editingProjectName}" onblur="actions.saveProjectName('${p.id}')" onkeydown="if(event.key==='Enter') actions.saveProjectName('${p.id}')" />` : `<span class="text-xs cursor-text" ondblclick="event.stopPropagation(); actions.startEditProject('${p.id}')">${p.name}</span>`}
                         </div>
                         <div class="hidden group-hover:flex items-center gap-1" onclick="event.stopPropagation()">
                           <i data-lucide="${p.isFavorite ? 'star' : 'star-off'}" class="w-4 h-4 cursor-pointer text-yellow-400 hover:text-yellow-500" onclick="event.stopPropagation(); actions.toggleFavoriteProject('${p.id}')"></i>
@@ -910,7 +982,7 @@
             </div>
          </div>
          <div class="flex-1 overflow-y-auto p-6 space-y-8">
-           ${projectGroups.map(group => {
+            ${projectGroups.map(group => {
         const groupTasks = state.tasks.filter(t => t.groupId === group.id);
         return `
                  <div class="mb-8">
@@ -942,16 +1014,16 @@
                             </tr>
                           </thead>
                           <tbody class="text-sm divide-y dark:divide-gray-700 bg-white dark:bg-gray-900">
-                           ${groupTasks.map(task => `
-                             <tr class="group/row hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                               <td class="p-2 text-center text-gray-300"><i data-lucide="grip-vertical" class="w-4 h-4"></i></td>
-                               ${group.columns.map(col => `<td class="p-2 border-r dark:border-gray-700 text-gray-700 dark:text-gray-200">${renderCellForColumn(task, col)}</td>`).join('')}
-                               <td class="p-2 text-center"><button onclick="actions.deleteTask('${task.id}')" class="opacity-0 group-hover/row:opacity-100 text-gray-400 hover:text-red-500"><i data-lucide="trash" class="w-4 h-4"></i></button></td>
-                             </tr>
-                           `).join('')}
-                           ${state.ui.showNewTask === group.id
-             ? `<tr class="bg-blue-50 dark:bg-blue-900/10"><td class="p-2"></td><td class="p-2 border-r dark:border-gray-700"><input id="new-task-name-${group.id}" class="w-full bg-transparent border-b border-blue-500 focus:outline-none" placeholder="Task name..." autofocus onkeydown="if(event.key==='Enter') actions.submitTask('${group.id}')" /></td><td colspan="${group.columns.length}" class="p-2"><button onclick="actions.submitTask('${group.id}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Add</button><button onclick="actions.setShowNewTask(null)" class="ml-2 text-gray-500 text-xs">Cancel</button></td></tr>`
-             : `<tr><td class="p-2"></td><td class="p-2" colspan="${group.columns.length + 1}"><button onclick="actions.setShowNewTask('${group.id}')" class="flex items-center gap-1 text-gray-400 hover:text-blue-500 text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Add Task</button></td></tr>`}
+                             ${groupTasks.map(task => `
+                               <tr class="group/row hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                 <td class="p-2 text-center text-gray-300"><i data-lucide="grip-vertical" class="w-4 h-4"></i></td>
+                                 ${group.columns.map(col => `<td class="p-2 border-r dark:border-gray-700 text-gray-700 dark:text-gray-200">${renderCellForColumn(task, col)}</td>`).join('')}
+                                 <td class="p-2 text-center"><button onclick="actions.deleteTask('${task.id}')" class="opacity-0 group-hover/row:opacity-100 text-gray-400 hover:text-red-500"><i data-lucide="trash" class="w-4 h-4"></i></button></td>
+                               </tr>
+                             `).join('')}
+                             ${state.ui.showNewTask === group.id
+              ? `<tr class="bg-blue-50 dark:bg-blue-900/10"><td class="p-2"></td><td class="p-2 border-r dark:border-gray-700"><input id="new-task-name-${group.id}" class="w-full bg-transparent border-b border-blue-500 focus:outline-none" placeholder="Task name..." autofocus onkeydown="if(event.key==='Enter') actions.submitTask('${group.id}')" /></td><td colspan="${group.columns.length}" class="p-2"><button onclick="actions.submitTask('${group.id}')" class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Add</button><button onclick="actions.setShowNewTask(null)" class="ml-2 text-gray-500 text-xs">Cancel</button></td></tr>`
+              : `<tr><td class="p-2"></td><td class="p-2" colspan="${group.columns.length + 1}"><button onclick="actions.setShowNewTask('${group.id}')" class="flex items-center gap-1 text-gray-400 hover:text-blue-500 text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Add Task</button></td></tr>`}
                           </tbody>
                         </table>
                       </div>
@@ -959,7 +1031,7 @@
                  </div>
                `;
       }).join('')}
-           <button onclick="actions.addGroup()" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2"><i data-lucide="plus" class="w-5 h-5"></i> Add New Group</button>
+            <button onclick="actions.addGroup()" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2"><i data-lucide="plus" class="w-5 h-5"></i> Add New Group</button>
          </div>
       </div>`;
     }
