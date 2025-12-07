@@ -295,32 +295,34 @@
       return allowed.includes(userEmail);
     }
 
-    // --- 6. NOTIFICATION SYSTEM (GET METHOD) ---
+    // --- 6. NOTIFICATION SYSTEM (FINAL CHANNEL MAPPING FIX) ---
     async function sendNotificationToCliq(taskName) {
-        if (!channelId || mode !== "team") return;
+        // Only proceed if we are in Team Mode and have a Channel ID to map to
+        // The channelId comes from the URL when you launch the dashboard command
+        if (!channelId || mode !== "team") return; 
 
-        // 🟢 YOUR EXTENSION WEBHOOK URL (keep as-is)
+        console.log("📤 Preparing Channel Mapped Notification...");
+
+        // 🟢 YOUR EXTENSION WEBHOOK URL
         const baseUrl = "https://cliq.zoho.com/api/v2/applications/2305843009213701800/incoming?zapikey=1001.3d8aae64bab5fe65c5682907e19fcb45.41d161bac1cea527694b74dbdc843360&appkey=sbx-Nzg0OS03NmY3OTRlOS1lNzJkLTQ4MzUtYjQwOS05YTg2ZGUwOWU5ZWQ=";
 
-        console.log("📤 Preparing GET Notification...");
-
-        // 1. Put data into the URL (browser cannot strip URL parameters)
+        // 1. Build Query Parameters manually (using GET method to avoid CORS)
         const params = new URLSearchParams();
-        params.append("channel_id", channelId);
-        // encode the message so special characters/newlines are safe in the URL
-        params.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser?.name || "Unknown"}`);
+        params.append("channel_id", channelId); // This triggers the mapping logic in backend
+        params.append("text", `🆕 New Task: *${taskName}* \n👤 Created by: ${currentUser?.name || 'User'}`);
 
-        const finalUrl = baseUrl + "&" + params.toString();
+        // 2. Construct Full URL
+        const finalUrl = `${baseUrl}&${params.toString()}`;
 
         try {
-            // 2. Send as GET (works like loading an image; browser can't remove the query)
+            // 3. Send using GET (Browser treats this like a standard request = No CORS block)
             await fetch(finalUrl, {
                 method: "GET",
-                mode: "no-cors"
+                mode: "no-cors" 
             });
-            console.log("✅ Notification Request Sent (GET Mode)");
-        } catch (e) {
-            console.error("❌ Notification Failed:", e);
+            console.log("✅ Notification Request Sent via GET to Channel:", channelId);
+        } catch (e) { 
+            console.error("❌ Notification Failed:", e); 
         }
     }
 
@@ -869,6 +871,7 @@
         api.triggerSave();
 
         // 🟢 TRIGGER NOTIFICATION TO CLIQ
+        // This will send the notification to the mapped channel (if in team mode)
         sendNotificationToCliq(taskName);
       },
       startEditTaskName: (id) => {
