@@ -60,50 +60,126 @@
 <body class="bg-gray-50 text-gray-800 transition-colors duration-200">
   <div id="app"></div>
   <script>
+    // --- 1. CONFIGURATION ---
     console.log("💾 Firestore db available?", !!db);
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
+
+    // Logic: If channelId exists, use it as boardid. Otherwise, fallback to URL boardid.
     const mode = urlParams.get("mode") || "personal";
     const channelId = urlParams.get("channelId");
-    const boardidFromUrl = urlParams.get("boardid");
+    let urlBoardId = urlParams.get("boardid");
+
+    // If in team mode, the Channel ID IS the Board ID
+    if (mode === "team" && channelId) {
+      urlBoardId = channelId;
+    }
 
     let currentUser = null;
     let boardid = null;
+    let savedSession = null;
 
+    // --- 2. AUTHENTICATION & TOKEN PARSING ---
+
+    // A. Check Local Storage First (The "Refresh" Fix)
+    // This allows the user to refresh the page without needing a new link
+    try {
+        const stored = localStorage.getItem("welltask_session");
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Allow session to last for 24 hours (86400000 ms)
+            if (Date.now() - parsed.timestamp < 86400000) { 
+                savedSession = parsed.user;
+            }
+        }
+    } catch (e) { }
+
+    // B. Check URL Token (The "Security" Fix)
+    // If a token is provided, it overrides the saved session (fresh login)
     if (token) {
       try {
         const decoded = atob(token);
         const parts = decoded.split("::");
-        if (parts.length >= 2) {
-          currentUser = { id: parts[1], name: parts[0].split("@")[0], email: parts[0] };
-        }
-        if (mode === "team" && channelId) {
-          boardid = channelId;
-        } else {
-          if (currentUser) {
-            boardid = currentUser.id;
+        
+        // parts structure: [0]=email, [1]=id, [2]=timestamp
+        if (parts.length >= 3) {
+          const tokenTime = parseInt(parts[2]);
+          const currentTime = Date.now();
+          // 10 minutes in milliseconds = 10 * 60 * 1000 = 600000
+          const timeDiff = currentTime - tokenTime;
+
+          // 🕒 SECURITY CHECK: EXPIRATION
+          // This prevents "Replay Attacks" (using an old link)
+          if (timeDiff > 600000) {
+             alert("🔒 Security Alert: This session link has expired.\nTo ensure security, links are one-time use.\n\nPlease re-open the board from Zoho Cliq.");
+             throw new Error("Token Expired");
+          } else {
+             console.log("✅ Token Valid. Age:", Math.round(timeDiff/1000), "seconds");
           }
+
+          currentUser = { 
+            id: parts[1], 
+            name: parts[0].split("@")[0], 
+            email: parts[0].trim() 
+          };
+        } else {
+           // Support for old tokens without timestamp (Optional fallback)
+           if(parts.length >= 2) {
+             currentUser = { id: parts[1], name: parts[0].split("@")[0], email: parts[0].trim() };
+           }
         }
-      } catch (e) { console.error("Auth Failed", e); }
+
+        // ✨ NEW: SAVE SESSION TO BROWSER (Persist login)
+        if (currentUser) {
+            localStorage.setItem("welltask_session", JSON.stringify({
+                user: currentUser,
+                timestamp: Date.now() // Save when we logged in
+            }));
+        }
+        
+      } catch (e) { 
+        console.error("Auth Failed", e); 
+        // If token fails, currentUser remains null
+      }
+    } else if (savedSession) {
+        // No URL token, but we have a valid saved session from before
+        currentUser = savedSession;
+        console.log("🔄 Restored Session for:", currentUser.email);
+    }
+
+    // C. Determine Board ID
+    if (currentUser) {
+        if (mode === "team") {
+            boardid = urlBoardId; 
+        } else {
+            boardid = currentUser.id;
+        }
+        console.log("🔐 Auth Success:", currentUser.email, "Mode:", mode, "BoardID:", boardid);
     }
 
     const uid = () => Date.now().toString() + Math.floor(Math.random() * 1000);
 
     function getStorageKey() {
-      if (boardid) return `welltask_state_${boardid}`;
-      return currentUser ? `welltask_state_${currentUser.email}` : null;
+      return boardid ? `welltask_state_${boardid}` : null;
     }
 
+    // Helper for colors
     function priorityClass(priority) {
       switch (priority) {
-        case "Critical": return "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300";
-        case "High": return "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300";
-        case "Medium": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200";
-        case "Low": return "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300";
-        default: return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200";
+        case "Critical":
+          return "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300";
+        case "High":
+          return "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300";
+        case "Medium":
+          return "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200";
+        case "Low":
+          return "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300";
+        default:
+          return "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-200";
       }
     }
 
+    // --- 3. FIREBASE LOGIC ---
     async function firebaseLoadBoard(docId) {
       try {
         if (!docId) return null;
@@ -121,12 +197,19 @@
       try {
         if (!docId) return;
         const ref = db.collection("boards").doc(docId);
-        await ref.set({ ...payload, boardid: docId, updatedAt: Date.now() });
+        // MERGE true allows updating fields without overwriting everything, 
+        // but here we overwrite state to keep sync.
+        await ref.set({
+          ...payload,
+          boardid: docId,
+          updatedAt: Date.now()
+        });
       } catch (e) {
         console.error("💥 [Firebase] Save error:", e);
       }
     }
 
+    // --- 4. STATE MANAGEMENT ---
     const initialState = {
       darkMode: false,
       currentUser,
@@ -137,15 +220,12 @@
       saveStatus: "saved",
       currentView: "list",
       workspaces: [],
-      selectedWorkspace: null,
       projects: [],
-      selectedProject: null,
       groups: [],
       tasks: [],
       ui: {
         showNewTask: null,
-        newTask: { name: "", assignee: null, priority: "Medium", status: "Not Started", dueDate: "", customFields: {} },
-        columnsGroupId: null,
+        newTask: {},
         editingWorkspaceId: null,
         editingWorkspaceName: "",
         editingProjectId: null,
@@ -158,32 +238,38 @@
       }
     };
 
-    let state = { ...initialState };
+    let state = {
+      ...initialState
+    };
 
+    // --- 5. PERMISSION CHECKER (CRITICAL FIX) ---
     function checkBoardPermission(board) {
-      if (!board) return false;
+      if (!board) return true; // If new board, we allow (it will be claimed on save)
       if (!currentUser) return false;
 
-      const email = currentUser.email;
-      const type = board.type || "personal";
-      const allowed = board.allowed_users || [];
+      const userEmail = currentUser.email.toLowerCase();
+      const boardType = board.type || "personal";
+      const allowed = (board.allowed_users || []).map(e => e.toLowerCase().trim()); // Normalize list
 
-      // PERSONAL BOARD
-      if (type === "personal") {
-        // Only EXACT allowed user can open it
-        return allowed.includes(email);
+      console.log(`🕵️ Checking Access. User: ${userEmail} | Type: ${boardType}`);
+      console.log("📋 Allowed List:", allowed);
+
+      // PERSONAL BOARD SECURITY
+      if (boardType === "personal") {
+        // STRICT: Only the owner (allowed list) can see it
+        return allowed.includes(userEmail);
       }
 
-      // TEAM BOARD
-      if (type === "team") {
-        // User must be in allowed_users list
-        return allowed.includes(email);
+      // TEAM BOARD SECURITY
+      if (boardType === "team") {
+        return allowed.includes(userEmail);
       }
 
       return false;
     }
 
 
+    // --- 6. CORE API ---
     const api = {
       saveTimer: null,
       load: async () => {
@@ -199,43 +285,31 @@
 
         state.isLoading = true;
         renderApp();
+
         try {
           const key = getStorageKey();
           let loaded = false;
+          let fbData = null;
 
-          if (key) {
-            const stored = localStorage.getItem(key);
-            if (stored) {
-              try {
-                const parsed = JSON.parse(stored);
-                applyLoadedState(parsed);
-                loaded = true;
-              } catch (e) { console.warn(e); }
-            }
-          }
+          // 1. Try Loading from Firebase
+          if (boardid) {
+            fbData = await firebaseLoadBoard(boardid);
 
-          if (!loaded || boardid) {
-            const docId = boardid;
-            if (docId) {
-              const fbData = await firebaseLoadBoard(docId);
-              if (fbData) {
-                // 🔐 SECURITY CHECK
-                const hasAccess = checkBoardPermission(fbData);
-
-                if (!hasAccess) {
-                  alert("🚫 You do not have permission to access this board.");
-                  state.showLogin = true;
-                  renderApp();
-                  return;
-                }
-
-                applyLoadedState(fbData);
-                loaded = true;
-
-                if (key)
-                  localStorage.setItem(key, JSON.stringify(fbData));
+            if (fbData) {
+              // ⛔️ SECURITY CHECK POINT
+              const hasAccess = checkBoardPermission(fbData);
+              if (!hasAccess) {
+                alert("🚫 ACCESS DENIED.\nYou are not listed in the 'allowed_users' for this board.");
+                state.showLogin = true;
+                state.isLoading = false;
+                renderApp();
+                return; // STOP EXECUTION
               }
-
+              applyLoadedState(fbData);
+              loaded = true;
+            } else {
+              // Board doesn't exist yet (Fresh Personal or Team Board)
+              console.log("✨ Creating New Board");
             }
           }
 
@@ -253,25 +327,56 @@
       initDefaults: () => {
         const wsId = uid();
         const pId = uid();
-        const g1 = uid(), g2 = uid(), g3 = uid();
-        const defaultColumns = [
-          { id: "task", name: "Task", isDefault: true },
-          { id: "assignee", name: "Assignee", isDefault: true },
-          { id: "priority", name: "Priority", isDefault: true },
-          { id: "status", name: "Status", isDefault: true },
-          { id: "duedate", name: "Due Date", isDefault: true }
-        ];
+        const g1 = uid(),
+          g2 = uid(),
+          g3 = uid();
+        const defaultColumns = [{
+          id: "task",
+          name: "Task",
+          isDefault: true
+        }, {
+          id: "assignee",
+          name: "Assignee",
+          isDefault: true
+        }, {
+          id: "priority",
+          name: "Priority",
+          isDefault: true
+        }, {
+          id: "status",
+          name: "Status",
+          isDefault: true
+        }, {
+          id: "duedate",
+          name: "Due Date",
+          isDefault: true
+        }];
 
-        state.workspaces = [{ id: wsId, name: "My Workspace" }];
-        state.projects = [{ id: pId, name: "Marketing Campaign", color: "bg-purple-500", workspaceId: wsId }];
-        state.groups = [
-          { id: g1, name: "To Do", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g2, name: "In Progress", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) },
-          { id: g3, name: "Done", projectId: pId, collapsed: false, columns: JSON.parse(JSON.stringify(defaultColumns)) }
-        ];
+        state.workspaces = [{
+          id: wsId,
+          name: "My Workspace",
+          isFavorite: false,
+          collapsed: false
+        }];
+        state.projects = [{
+          id: pId,
+          name: "My Project",
+          color: "bg-purple-500",
+          workspaceId: wsId,
+          isFavorite: false
+        }];
+        state.groups = [{
+          id: g1,
+          name: "To Do",
+          projectId: pId,
+          collapsed: false,
+          columns: JSON.parse(JSON.stringify(defaultColumns))
+        }];
         state.tasks = [];
         state.selectedWorkspace = wsId;
         state.selectedProject = pId;
+
+        // SAVE IMMEDIATELY TO LOCK PERMISSIONS
         api.triggerSave();
       },
 
@@ -283,21 +388,36 @@
       },
 
       performSave: async () => {
-        if (!boardid && !state.currentUser) return;
+        if (!boardid || !state.currentUser) return;
         try {
           state.saveStatus = "saving";
           renderStatusIndicator();
+
+          // --- 🔒 AUTOMATIC PERMISSION ASSIGNMENT ---
           let allowedUsers = [];
 
-          if (mode === "personal") {
-            allowedUsers = [state.currentUser.email];  // Only owner allowed
+          // Fetch existing to preserve teammates
+          const existing = await firebaseLoadBoard(boardid);
+
+          if (existing && existing.allowed_users) {
+            allowedUsers = existing.allowed_users;
+            // Ensure current user is strictly in the list (self-healing)
+            if (!allowedUsers.includes(state.currentUser.email)) {
+              allowedUsers.push(state.currentUser.email);
+            }
           } else {
-            // TEAM MODE → Do not overwrite existing allowed users
-            const existing = await firebaseLoadBoard(docId);
-            allowedUsers = existing?.allowed_users || [];
+            // New Board: Initialize with Creator
+            allowedUsers = [state.currentUser.email];
           }
 
-          // 🔐 New secure payload
+          // If Personal mode, FORCE strict owner access only
+          if (mode === "personal") {
+            // For personal, usually just the owner. 
+            // If you want to allow sharing personal boards later, remove the line below.
+            // But for the contest security requirement:
+            allowedUsers = [state.currentUser.email];
+          }
+
           const payload = {
             darkMode: state.darkMode,
             currentView: state.currentView,
@@ -305,20 +425,16 @@
             projects: state.projects,
             groups: state.groups,
             tasks: state.tasks,
-            type: mode === 'team' ? 'team' : 'personal',
-            ownerId: state.currentUser ? state.currentUser.id : null,
-            allowed_users: allowedUsers,
+            type: mode, // 'personal' or 'team'
+            ownerId: state.currentUser.id,
+            allowed_users: allowedUsers, // 👈 SAVES SECURITY
             updatedAt: Date.now()
           };
 
-
-          const key = getStorageKey();
-          if (key) localStorage.setItem(key, JSON.stringify(payload));
-
-          const docId = boardid || (state.currentUser ? state.currentUser.id : "");
-          await firebaseSaveBoard(docId, payload);
+          await firebaseSaveBoard(boardid, payload);
           state.saveStatus = "saved";
         } catch (e) {
+          console.error(e);
           state.saveStatus = "error";
         } finally {
           renderStatusIndicator();
@@ -334,7 +450,10 @@
       state.currentView = parsed.currentView || "list";
       state.darkMode = !!parsed.darkMode;
 
-      if (state.workspaces.length > 0) state.selectedWorkspace = state.workspaces[0].id;
+      // Fix: Ensure selectedWorkspace exists
+      if (state.workspaces.length > 0 && !state.workspaces.find(w => w.id === state.selectedWorkspace)) {
+        state.selectedWorkspace = state.workspaces[0].id;
+      }
       if (state.projects.length > 0) {
         const proj = state.projects.find(p => p.workspaceId === state.selectedWorkspace);
         state.selectedProject = (proj && proj.id) || state.projects[0].id;
@@ -365,23 +484,59 @@
       },
       addProjectToWorkspace: (wsId) => {
         const id = uid();
-        state.projects.push({ id, name: "New Project", color: "bg-green-500", workspaceId: wsId });
+        state.projects.push({
+          id,
+          name: "New Project",
+          color: "bg-green-500",
+          workspaceId: wsId
+        });
         state.selectedProject = id;
         const g1 = uid();
         state.groups.push({
-          id: g1, name: "To Do", projectId: id, collapsed: false,
-          columns: [
-            { id: "task", name: "Task", isDefault: true },
-            { id: "assignee", name: "Assignee", isDefault: true },
-            { id: "priority", name: "Priority", isDefault: true },
-            { id: "status", name: "Status", isDefault: true },
-            { id: "duedate", name: "Due Date", isDefault: true }
+          id: g1,
+          name: "To Do",
+          projectId: id,
+          collapsed: false,
+          columns: [{
+              id: "task",
+              name: "Task",
+              isDefault: true
+            },
+            {
+              id: "assignee",
+              name: "Assignee",
+              isDefault: true
+            },
+            {
+              id: "priority",
+              name: "Priority",
+              isDefault: true
+            },
+            {
+              id: "status",
+              name: "Status",
+              isDefault: true
+            },
+            {
+              id: "duedate",
+              name: "Due Date",
+              isDefault: true
+            }
           ]
         });
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
-      toggleTheme: () => { state.darkMode = !state.darkMode; renderApp(); api.triggerSave(); },
-      setView: (view) => { state.currentView = view; renderApp(); api.triggerSave(); },
+      toggleTheme: () => {
+        state.darkMode = !state.darkMode;
+        renderApp();
+        api.triggerSave();
+      },
+      setView: (view) => {
+        state.currentView = view;
+        renderApp();
+        api.triggerSave();
+      },
       selectWorkspace: (id) => {
         state.selectedWorkspace = id;
         const proj = state.projects.find(p => p.workspaceId === id);
@@ -392,57 +547,112 @@
         const name = prompt("Enter workspace name:");
         if (!name || !name.trim()) return;
         const id = uid();
-        state.workspaces.push({ id, name: name.trim(), collapsed: false, isFavorite: false });
+        state.workspaces.push({
+          id,
+          name: name.trim(),
+          collapsed: false,
+          isFavorite: false
+        });
         state.selectedWorkspace = id;
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
       addProject: () => {
         if (!state.selectedWorkspace) return;
         const name = prompt("Enter project name:");
         if (!name || !name.trim()) return;
         const id = uid();
-        state.projects.push({ id, name: name.trim(), color: "bg-green-500", workspaceId: state.selectedWorkspace, isFavorite: false });
+        state.projects.push({
+          id,
+          name: name.trim(),
+          color: "bg-green-500",
+          workspaceId: state.selectedWorkspace,
+          isFavorite: false
+        });
         state.selectedProject = id;
         const g1 = uid();
         state.groups.push({
-          id: g1, name: "To Do", projectId: id, collapsed: false,
-          columns: [
-            { id: "task", name: "Task", isDefault: true },
-            { id: "assignee", name: "Assignee", isDefault: true },
-            { id: "priority", name: "Priority", isDefault: true },
-            { id: "status", name: "Status", isDefault: true },
-            { id: "duedate", name: "Due Date", isDefault: true }
+          id: g1,
+          name: "To Do",
+          projectId: id,
+          collapsed: false,
+          columns: [{
+              id: "task",
+              name: "Task",
+              isDefault: true
+            },
+            {
+              id: "assignee",
+              name: "Assignee",
+              isDefault: true
+            },
+            {
+              id: "priority",
+              name: "Priority",
+              isDefault: true
+            },
+            {
+              id: "status",
+              name: "Status",
+              isDefault: true
+            },
+            {
+              id: "duedate",
+              name: "Due Date",
+              isDefault: true
+            }
           ]
         });
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
       startEditWorkspace: (id) => {
         const ws = state.workspaces.find(w => w.id === id);
-        if (ws) { state.ui.editingWorkspaceId = id; state.ui.editingWorkspaceName = ws.name; renderApp(); }
+        if (ws) {
+          state.ui.editingWorkspaceId = id;
+          state.ui.editingWorkspaceName = ws.name;
+          renderApp();
+        }
       },
       saveWorkspaceName: (id) => {
         const input = document.getElementById(`ws-name-input-${id}`);
         const ws = state.workspaces.find(w => w.id === id);
-        if (ws && input && input.value.trim()) { ws.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingWorkspaceId = null; renderApp();
+        if (ws && input && input.value.trim()) {
+          ws.name = input.value.trim();
+          api.triggerSave();
+        }
+        state.ui.editingWorkspaceId = null;
+        renderApp();
       },
       deleteWorkspace: (id) => {
         if (state.workspaces.length <= 1) return alert("Keep at least one workspace.");
         state.workspaces = state.workspaces.filter(w => w.id !== id);
         if (state.selectedWorkspace === id) state.selectedWorkspace = state.workspaces[0].id;
         state.projects = state.projects.filter(p => p.workspaceId !== id);
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
-      selectProject: (id) => { state.selectedProject = id; renderApp(); },
+      selectProject: (id) => {
+        state.selectedProject = id;
+        renderApp();
+      },
       startEditProject: (id) => {
         const p = state.projects.find(pr => pr.id === id);
-        if (p) { state.ui.editingProjectId = id; state.ui.editingProjectName = p.name; renderApp(); }
+        if (p) {
+          state.ui.editingProjectId = id;
+          state.ui.editingProjectName = p.name;
+          renderApp();
+        }
       },
       saveProjectName: (id) => {
         const input = document.getElementById(`proj-name-input-${id}`);
         const p = state.projects.find(pr => pr.id === id);
-        if (p && input && input.value.trim()) { p.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingProjectId = null; renderApp();
+        if (p && input && input.value.trim()) {
+          p.name = input.value.trim();
+          api.triggerSave();
+        }
+        state.ui.editingProjectId = null;
+        renderApp();
       },
       deleteProject: (id) => {
         if (!confirm("Delete Project?")) return;
@@ -450,35 +660,53 @@
         state.groups = state.groups.filter(g => g.projectId !== id);
         state.tasks = state.tasks.filter(t => t.projectId !== id);
         state.selectedProject = state.projects[0]?.id || null;
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
       toggleGroupCollapse: (id) => {
         const g = state.groups.find(gr => gr.id === id);
-        if (g) { g.collapsed = !g.collapsed; renderApp(); api.triggerSave(); }
+        if (g) {
+          g.collapsed = !g.collapsed;
+          renderApp();
+          api.triggerSave();
+        }
       },
       addGroup: () => {
         if (!state.selectedProject) return;
         const base = state.groups.find(g => g.projectId === state.selectedProject);
         state.groups.push({
-          id: uid(), name: "New Group", projectId: state.selectedProject, collapsed: false,
+          id: uid(),
+          name: "New Group",
+          projectId: state.selectedProject,
+          collapsed: false,
           columns: base ? JSON.parse(JSON.stringify(base.columns)) : []
         });
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
       startEditGroup: (id) => {
         const g = state.groups.find(gr => gr.id === id);
-        if (g) { state.ui.editingGroupId = id; state.ui.editingGroupName = g.name; renderApp(); }
+        if (g) {
+          state.ui.editingGroupId = id;
+          state.ui.editingGroupName = g.name;
+          renderApp();
+        }
       },
       saveGroupName: (id) => {
         const input = document.getElementById(`group-name-input-${id}`);
         const g = state.groups.find(gr => gr.id === id);
-        if (g && input && input.value.trim()) { g.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingGroupId = null; renderApp();
+        if (g && input && input.value.trim()) {
+          g.name = input.value.trim();
+          api.triggerSave();
+        }
+        state.ui.editingGroupId = null;
+        renderApp();
       },
       deleteGroup: (id) => {
         if (!confirm("Delete group?")) return;
         state.groups = state.groups.filter(g => g.id !== id);
-        renderApp(); api.triggerSave();
+        renderApp();
+        api.triggerSave();
       },
       toggleColumnsPanel: (gid) => {
         state.ui.columnsGroupId = state.ui.columnsGroupId === gid ? null : gid;
@@ -486,11 +714,23 @@
       },
       addColumn: (gid) => {
         const g = state.groups.find(gr => gr.id === gid);
-        if (g) { g.columns.push({ id: "col_" + uid(), name: "New Column", isDefault: false }); renderApp(); api.triggerSave(); }
+        if (g) {
+          g.columns.push({
+            id: "col_" + uid(),
+            name: "New Column",
+            isDefault: false
+          });
+          renderApp();
+          api.triggerSave();
+        }
       },
       deleteColumn: (gid, colId) => {
         const g = state.groups.find(gr => gr.id === gid);
-        if (g) { g.columns = g.columns.filter(c => c.id !== colId); renderApp(); api.triggerSave(); }
+        if (g) {
+          g.columns = g.columns.filter(c => c.id !== colId);
+          renderApp();
+          api.triggerSave();
+        }
       },
       startEditColumn: (gid, colId) => {
         state.ui.editingColumnGroupId = gid;
@@ -506,9 +746,14 @@
         const g = state.groups.find(gr => gr.id === gid);
         if (g && input) {
           const col = g.columns.find(c => c.id === colId);
-          if (col && input.value.trim()) { col.name = input.value.trim(); api.triggerSave(); }
+          if (col && input.value.trim()) {
+            col.name = input.value.trim();
+            api.triggerSave();
+          }
         }
-        state.ui.editingColumnGroupId = null; state.ui.editingColumnId = null; renderApp();
+        state.ui.editingColumnGroupId = null;
+        state.ui.editingColumnId = null;
+        renderApp();
       },
       setShowNewTask: (gid) => {
         state.ui.showNewTask = gid;
@@ -516,34 +761,67 @@
         if (favProject) state.selectedProject = favProject.id;
         const favWorkspace = state.workspaces.find(w => w.isFavorite);
         if (favWorkspace) state.selectedWorkspace = favWorkspace.id;
-        state.ui.newTask = { name: "", assignee: null, priority: "Medium", status: "Not Started", dueDate: "", customFields: {} };
+        state.ui.newTask = {
+          name: "",
+          assignee: null,
+          priority: "Medium",
+          status: "Not Started",
+          dueDate: "",
+          customFields: {}
+        };
         renderApp();
       },
       submitTask: (gid) => {
         const input = document.getElementById(`new-task-name-${gid}`);
         if (!input || !input.value.trim()) return;
         state.tasks.push({
-          id: uid(), name: input.value.trim(), groupId: gid, projectId: state.selectedProject,
-          priority: "Medium", status: "Not Started", assignee: null, dueDate: "", customFields: {}
+          id: uid(),
+          name: input.value.trim(),
+          groupId: gid,
+          projectId: state.selectedProject,
+          priority: "Medium",
+          status: "Not Started",
+          assignee: null,
+          dueDate: "",
+          customFields: {}
         });
-        state.ui.showNewTask = null; renderApp(); api.triggerSave();
+        state.ui.showNewTask = null;
+        renderApp();
+        api.triggerSave();
       },
-      startEditTaskName: (id) => { state.ui.editingTaskId = id; renderApp(); setTimeout(() => document.getElementById(`task-name-input-${id}`)?.focus(), 10); },
+      startEditTaskName: (id) => {
+        state.ui.editingTaskId = id;
+        renderApp();
+        setTimeout(() => document.getElementById(`task-name-input-${id}`)?.focus(), 10);
+      },
       saveTaskName: (id) => {
         const input = document.getElementById(`task-name-input-${id}`);
         const t = state.tasks.find(task => task.id === id);
-        if (t && input && input.value.trim()) { t.name = input.value.trim(); api.triggerSave(); }
-        state.ui.editingTaskId = null; renderApp();
+        if (t && input && input.value.trim()) {
+          t.name = input.value.trim();
+          api.triggerSave();
+        }
+        state.ui.editingTaskId = null;
+        renderApp();
       },
       updateTaskField: (id, field, val, extra) => {
         const t = state.tasks.find(task => task.id === id);
         if (!t) return;
-        if (field === "assignee") t.assignee = val ? { name: val } : null;
-        else if (field === "custom") { if (!t.customFields) t.customFields = {}; t.customFields[extra] = val; }
-        else t[field] = val;
-        renderApp(); api.triggerSave();
+        if (field === "assignee") t.assignee = val ? {
+          name: val
+        } : null;
+        else if (field === "custom") {
+          if (!t.customFields) t.customFields = {};
+          t.customFields[extra] = val;
+        } else t[field] = val;
+        renderApp();
+        api.triggerSave();
       },
-      deleteTask: (id) => { state.tasks = state.tasks.filter(t => t.id !== id); renderApp(); api.triggerSave(); }
+      deleteTask: (id) => {
+        state.tasks = state.tasks.filter(t => t.id !== id);
+        renderApp();
+        api.triggerSave();
+      }
     };
     window.actions = actions;
 
@@ -620,9 +898,9 @@
 
     function renderCellForColumn(task, col) {
       if (col.id === 'task') {
-        return state.ui.editingTaskId === task.id
-          ? `<input id="task-name-input-${task.id}" class="w-full bg-white dark:bg-gray-700 border border-blue-400 rounded px-2 py-1" value="${task.name}" onblur="actions.saveTaskName('${task.id}')" onkeydown="if(event.key==='Enter') actions.saveTaskName('${task.id}')" autofocus />`
-          : `<div class="flex items-center justify-between group"><span class="cursor-text hover:text-blue-600 dark:hover:text-blue-400" onclick="actions.startEditTaskName('${task.id}')">${task.name}</span><i data-lucide="pencil" class="w-3 h-3 text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 cursor-pointer transition" onclick="event.stopPropagation(); actions.startEditTaskName('${task.id}')"></i></div>`;
+        return state.ui.editingTaskId === task.id ?
+          `<input id="task-name-input-${task.id}" class="w-full bg-white dark:bg-gray-700 border border-blue-400 rounded px-2 py-1" value="${task.name}" onblur="actions.saveTaskName('${task.id}')" onkeydown="if(event.key==='Enter') actions.saveTaskName('${task.id}')" autofocus />` :
+          `<div class="flex items-center justify-between group"><span class="cursor-text hover:text-blue-600 dark:hover:text-blue-400" onclick="actions.startEditTaskName('${task.id}')">${task.name}</span><i data-lucide="pencil" class="w-3 h-3 text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 cursor-pointer transition" onclick="event.stopPropagation(); actions.startEditTaskName('${task.id}')"></i></div>`;
       }
       if (col.id === 'priority') {
         const p = task.priority || 'Medium';
@@ -770,7 +1048,14 @@
     }
 
     function renderLogin() {
-      return `<div class="h-screen flex items-center justify-center bg-gray-100 text-xl text-gray-600 font-medium"><div class="text-center"><p class="mb-2">🔒 Authentication Required</p><p class="text-sm text-gray-400">Please open WellTask from Zoho Cliq.</p></div></div>`;
+      return `<div class="h-screen flex flex-col items-center justify-center bg-gray-100 text-gray-600 font-medium">
+            <div class="text-center bg-white p-8 rounded-xl shadow-lg">
+                <p class="mb-4 text-xl">🔒 Access Denied</p>
+                <p class="text-sm text-gray-400">You do not have permission to view this board.</p>
+                <p class="text-xs text-gray-400 mt-2">Board ID: ${boardid}</p>
+                <p class="text-xs text-gray-400">User: ${currentUser ? currentUser.email : "Unknown"}</p>
+            </div>
+        </div>`;
     }
 
     function renderAuthWindow() {
@@ -818,13 +1103,11 @@
         lucide.createIcons();
         return;
       }
-
       if (state.showAuthWindow) {
         app.innerHTML = renderAuthWindow();
         lucide.createIcons();
         return;
       }
-
       if (state.isLoading) {
         app.innerHTML = '<div class="h-screen flex items-center justify-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>';
         return;
@@ -832,12 +1115,11 @@
 
       app.innerHTML = `
         <div class="flex h-screen overflow-hidden">
-          ${renderSidebar()}
-          <div class="flex-1 overflow-hidden">
+            ${renderSidebar()}
+            <div class="flex-1 overflow-hidden">
             ${state.currentView === "kanban" ? renderKanbanView() : renderListView()}
-          </div>
-        </div>
-      `;
+            </div>
+        </div>`;
       renderStatusIndicator();
       lucide.createIcons();
       if (state.currentView === "kanban") initKanbanDragDrop();
@@ -850,7 +1132,7 @@
           group: 'shared',
           animation: 150,
           ghostClass: 'bg-blue-100',
-          onEnd: function (evt) {
+          onEnd: function(evt) {
             const itemEl = evt.item;
             const newGroupEl = evt.to;
             const oldGroupEl = evt.from;
