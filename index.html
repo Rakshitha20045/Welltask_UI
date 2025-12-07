@@ -255,6 +255,7 @@
       projects: [],
       groups: [],
       tasks: [],
+      allowedUsers: [], // <--- ADDED: Store allowed users for dropdown
       ui: {
         showNewTask: null,
         newTask: {},
@@ -280,7 +281,6 @@
       if (!currentUser) return false;
 
       // 1. OWNER OVERRIDE: If I am the owner, always let me in.
-      // This prevents "Access Denied" on your own Personal boards.
       if (board.ownerId && board.ownerId === currentUser.id) {
           console.log("🔓 Access Granted: User is the Owner");
           return true;
@@ -476,6 +476,9 @@
       state.tasks = parsed.tasks || [];
       state.currentView = parsed.currentView || "list";
       state.darkMode = !!parsed.darkMode;
+      
+      // <--- ADDED: Load allowed users from database
+      state.allowedUsers = parsed.allowed_users || [state.currentUser?.email];
 
       // Fix: Ensure selectedWorkspace exists
       if (state.workspaces.length > 0 && !state.workspaces.find(w => w.id === state.selectedWorkspace)) {
@@ -953,7 +956,26 @@
         return `<select onchange="actions.updateTaskField('${task.id}', 'status', this.value)" class="bg-transparent text-xs border border-gray-200 dark:border-gray-600 rounded px-1"><option value="Not Started" ${task.status === 'Not Started' ? 'selected' : ''}>Not Started</option><option value="In Progress" ${task.status === 'In Progress' ? 'selected' : ''}>In Progress</option><option value="Done" ${task.status === 'Done' ? 'selected' : ''}>Done</option><option value="Stuck" ${task.status === 'Stuck' ? 'selected' : ''}>Stuck</option></select>`;
       }
       if (col.id === 'assignee') {
-        return `<input type="text" placeholder="Unassigned" class="bg-transparent w-full text-xs focus:outline-none" value="${task.assignee?.name || ''}" onchange="actions.updateTaskField('${task.id}', 'assignee', this.value)" />`;
+        const users = state.allowedUsers && state.allowedUsers.length > 0 
+          ? state.allowedUsers 
+          : [state.currentUser?.email];
+
+        const options = users.map(u => {
+          const isSelected = task.assignee?.name === u ? 'selected' : '';
+          const displayName = u.split('@')[0]; 
+          return `<option value="${u}" ${isSelected}>${displayName}</option>`;
+        }).join('');
+
+        return `
+          <select 
+            onchange="actions.updateTaskField('${task.id}', 'assignee', this.value)" 
+            class="bg-transparent w-full text-xs focus:outline-none cursor-pointer border-0 p-0 text-gray-700 dark:text-gray-300"
+            onclick="event.stopPropagation()"
+          >
+            <option value="" ${!task.assignee ? 'selected' : ''}>Unassigned</option>
+            ${options}
+          </select>
+        `;
       }
       if (col.id === 'duedate') {
         return `<input type="date" class="bg-transparent text-xs text-gray-500 dark:text-gray-400 focus:outline-none" value="${task.dueDate || ''}" onchange="actions.updateTaskField('${task.id}', 'dueDate', this.value)" />`;
