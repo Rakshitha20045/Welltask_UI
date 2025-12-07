@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WellTask Preview</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCaVEmWvh0_hcxFJQG00QAXNxRsIMpgy94",
+            authDomain: "welltask-8bbcf.firebaseapp.com",
+            projectId: "welltask-8bbcf",
+            storageBucket: "welltask-8bbcf.firebasestorage.app",
+            messagingSenderId: "533119656804",
+            appId: "1:533119656804:web:ec296e70c7b7e5746c1071",
+            measurementId: "G-3HD74YPC52"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+    </script>
+
+    <style>
+        body {
+            background: #f8fafc;
+        }
+    </style>
+</head>
+
+<body class="p-4 text-gray-800">
+    <div id="preview" class="space-y-4"></div>
+
+    <script>
+        const url = new URL(window.location.href);
+        const token = url.searchParams.get("token");
+        const boardid = url.searchParams.get("boardid");
+
+        async function loadPreview() {
+            const ref = db.collection("boards").doc(boardid);
+            const snap = await ref.get();
+
+            if (!snap.exists) {
+                document.getElementById("preview").innerHTML =
+                    "<p class='text-red-600 font-semibold'>Board not found.</p>";
+                return;
+            }
+
+            const data = snap.data();
+
+            const tasks = data.tasks || [];
+            const groups = data.groups || [];
+
+            // --------------------------
+            // CALCULATE SUMMARY
+            // --------------------------
+            const total = tasks.length;
+            const completed = tasks.filter(t => t.status === "Done").length;
+            const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date()).length;
+            const pending = total - completed;
+
+            // --------------------------
+            // STATUS BREAKDOWN
+            // --------------------------
+            const todo = tasks.filter(t => t.status === "Not Started").length;
+            const inProgress = tasks.filter(t => t.status === "In Progress").length;
+
+            // --------------------------
+            // TOP 3 TASKS
+            // --------------------------
+            const top = tasks.slice(0, 3);
+
+            // --------------------------
+            // RENDER UI
+            // --------------------------
+            document.getElementById("preview").innerHTML = `
+        <div class="bg-white p-4 shadow rounded-lg">
+          <h2 class="text-xl font-bold mb-1">🗂️ WellTask Overview</h2>
+          <p class="text-gray-500 text-sm mb-3">Preview (read-only)</p>
+
+          <!-- Summary -->
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold">📊 Summary</h3>
+            <ul class="text-sm mt-2 space-y-1">
+              <li>• Total Tasks: ${total}</li>
+              <li>• Completed: ${completed}</li>
+              <li>• Pending: ${pending}</li>
+              <li>• Overdue: ${overdue}</li>
+            </ul>
+          </div>
+
+          <!-- Status Breakdown -->
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold">📌 Status Breakdown</h3>
+            <ul class="text-sm mt-2 space-y-1">
+              <li>• To Do: ${todo}</li>
+              <li>• In Progress: ${inProgress}</li>
+              <li>• Done: ${completed}</li>
+            </ul>
+          </div>
+
+          <!-- Top Tasks -->
+          <div>
+            <h3 class="text-lg font-semibold">🔥 Top Tasks</h3>
+            <ul class="text-sm mt-2 space-y-1">
+              ${top
+                    .map(t => `<li>• ${t.name} (${t.priority || "Medium"})</li>`)
+                    .join("")}
+            </ul>
+          </div>
+        </div>
+      `;
+        }
+
+        loadPreview();
+    </script>
+</body>
+
+</html>
