@@ -360,13 +360,15 @@
         const g1 = uid(),
           g2 = uid(),
           g3 = uid();
+        
+        // ✏️ RENAMED DEFAULT COLUMNS HERE
         const defaultColumns = [{
           id: "task",
-          name: "Task",
+          name: "Task Title", // Renamed from "Task"
           isDefault: true
         }, {
           id: "assignee",
-          name: "Assignee",
+          name: "Owner", // Renamed from "Assignee"
           isDefault: true
         }, {
           id: "priority",
@@ -374,27 +376,29 @@
           isDefault: true
         }, {
           id: "status",
-          name: "Status",
+          name: "Current Status", // Renamed from "Status"
           isDefault: true
         }, {
           id: "duedate",
-          name: "Due Date",
+          name: "Deadline", // Renamed from "Due Date"
           isDefault: true
         }];
 
+        // ✏️ RENAMED DEFAULT WORKSPACE AND PROJECT HERE
         state.workspaces = [{
           id: wsId,
-          name: "My Workspace",
+          name: "Team Workspace", // Renamed from "My Workspace"
           isFavorite: false,
           collapsed: false
         }];
         state.projects = [{
           id: pId,
-          name: "My Project",
+          name: "Project Alpha", // Renamed from "My Project"
           color: "bg-purple-500",
           workspaceId: wsId,
           isFavorite: false
         }];
+        
         state.groups = [{
           id: g1,
           name: "To Do",
